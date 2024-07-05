@@ -95,6 +95,23 @@ class FairnessExplainer:
             model, sen_att, priv_val, unpriv_dict
         )
 
+    def _compute_expected_value(self, X_baseline, sample_size):
+        """
+        Computes the expected value over the baseline dataset.
+
+        :param X_baseline: The baseline dataset.
+        :param sample_size: The number of samples to draw from X_baseline.
+        :return: The expected value.
+        """
+        sample_indices = np.random.choice(
+            X_baseline.shape[0], size=sample_size, replace=True
+        )
+        sampled_X_baseline = X_baseline[sample_indices]
+        model_output = self.weighted_explainer._fairness_value_function(
+            sampled_X_baseline
+        )
+        return np.mean(model_output)
+
     def shap_values(
         self,
         X,
@@ -113,6 +130,9 @@ class FairnessExplainer:
         :param num_samples: The number of samples to draw from X_baseline for each instance in X.
         :return: A numpy array of SHAP values for each instance in X.
         """
+
+        # Compute the expected value
+        self.expected_value = self._compute_expected_value(X_baseline, sample_size)
 
         return np.array(
             [
