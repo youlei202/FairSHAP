@@ -281,16 +281,12 @@ def perturb_pandas_ver(X, sen_att, priv_val, ratio=0.5):
     return X_qtb  # pd.DataFrame
 
 
-def perturb_numpy_ver(X, sen_att, priv_val, ratio=0.5):
+def perturb_numpy_ver(X, sen_att, priv_val, unpriv_dict, ratio=0.5):
     """params
     X       : a np.ndarray
     sen_att : list, column index of sensitive attribute(s)
     priv_val: list, privileged value for each sen-att
     """
-    unpriv_dict = [list(set(X[:, sa])) for sa in sen_att]
-    for sa_list, pv in zip(unpriv_dict, priv_val):
-        if pv in sa_list:
-            sa_list.remove(pv)
 
     X_qtb = X.copy()
     num, dim = len(X_qtb), len(sen_att)
@@ -306,8 +302,7 @@ def perturb_numpy_ver(X, sen_att, priv_val, ratio=0.5):
             if X_qtb[i, sa] != pv:
                 X_qtb[i, sa] = pv
             else:
-                if len(un) > 0:
-                    X_qtb[i, sa] = np.random.choice(un)
+                X_qtb[i, sa] = np.random.choice(un)
 
     return X_qtb  # np.ndarray
 

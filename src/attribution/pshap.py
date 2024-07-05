@@ -12,7 +12,7 @@ class WeightedExplainer:
     weighted according to a given probability distribution.
     """
 
-    def __init__(self, model, sen_att, priv_val):
+    def __init__(self, model, sen_att, priv_val, unpriv_dict):
         """
         Initializes the WeightedExplainer.
 
@@ -23,6 +23,7 @@ class WeightedExplainer:
         self.model = model
         self.sen_att = sen_att
         self.priv_val = priv_val
+        self.unpriv_dict = unpriv_dict
 
     def explain_instance(
         self, x, X_baseline, weights, sample_size=1000, shap_sample_size="auto"
@@ -59,12 +60,17 @@ class WeightedExplainer:
 
     def _fairness_value_function(self, X):
         X_disturbed = perturb_numpy_ver(
-            X=X, sen_att=self.sen_att, priv_val=self.priv_val, ratio=1.0
+            X=X,
+            sen_att=self.sen_att,
+            priv_val=self.priv_val,
+            unpriv_dict=self.unpriv_dict,
+            ratio=1.0,
         )
 
-        fx = self.model.predict_proba(X)
-        fx_q = self.model.predict_proba(X_disturbed)
+        fx = self.model.predict_proba(X)[:, 1]
+        fx_q = self.model.predict_proba(X_disturbed)[:, 1]
 
+        # TODO: There might be problems when the classification problem is not binary
         return np.abs(fx - fx_q)
 
 
@@ -74,7 +80,7 @@ class FairnessExplainer:
     using joint probability distributions to weight the baseline data for each instance.
     """
 
-    def __init__(self, model, sen_att, priv_val):
+    def __init__(self, model, sen_att, priv_val, unpriv_dict):
         """
         Initializes the FairnessExplainer.
 
@@ -84,7 +90,10 @@ class FairnessExplainer:
         self.model = model
         self.sen_att = sen_att
         self.priv_val = priv_val
-        self.weighted_explainer = WeightedExplainer(model, sen_att, priv_val)
+        self.unpriv_dict = unpriv_dict
+        self.weighted_explainer = WeightedExplainer(
+            model, sen_att, priv_val, unpriv_dict
+        )
 
     def shap_values(
         self,
