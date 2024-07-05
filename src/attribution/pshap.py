@@ -1,6 +1,7 @@
 import numpy as np
 import shap
 from copy import deepcopy
+from src.attribution.oracle_metric import perturb_numpy_ver, ell_fair_x
 
 EPSILON = 1e-20
 
@@ -11,7 +12,7 @@ class WeightedExplainer:
     weighted according to a given probability distribution.
     """
 
-    def __init__(self, model):
+    def __init__(self, model, sen_att, priv_val):
         """
         Initializes the WeightedExplainer.
 
@@ -20,6 +21,8 @@ class WeightedExplainer:
                       for SHAP value computation.
         """
         self.model = model
+        self.sen_att = sen_att
+        self.priv_val = priv_val
 
     def explain_instance(
         self, x, X_baseline, weights, sample_size=1000, shap_sample_size="auto"
@@ -48,42 +51,60 @@ class WeightedExplainer:
 
         # Use the sampled_X_baseline as the background data for this specific explanation
         explainer_temp = shap.KernelExplainer(
-            self.model.predict_proba, sampled_X_baseline
+            self._fairness_value_function, sampled_X_baseline
         )
         shap_values = explainer_temp.shap_values(x, nsamples=shap_sample_size)
 
         return shap_values
 
+    def _fairness_value_function(self, X):
+        X_disturbed = perturb_numpy_ver(
+            X=X, sen_att=self.sen_att, priv_val=self.priv_val, ratio=1.0
+        )
 
-class JointProbabilityExplainer:
+        fx = self.model.predict_proba(X)
+        fx_q = self.model.predict_proba(X_disturbed)
+
+        return np.abs(fx - fx_q)
+
+
+class FairnessExplainer:
     """
     This class provides SHAP explanations for model predictions across multiple instances,
     using joint probability distributions to weight the baseline data for each instance.
     """
 
-    def __init__(self, model):
+    def __init__(self, model, sen_att, priv_val):
         """
-        Initializes the JointProbabilityExplainer.
+        Initializes the FairnessExplainer.
 
         :param model: A machine learning model that supports the predict_proba method.
                       This model is used to compute SHAP values using weighted baseline data.
         """
         self.model = model
-        self.weighted_explainer = WeightedExplainer(model)
+        self.sen_att = sen_att
+        self.priv_val = priv_val
+        self.weighted_explainer = WeightedExplainer(model, sen_att, priv_val)
 
     def shap_values(
-        self, X, X_baseline, joint_probs, sample_size=1000, shap_sample_size="auto"
+        self,
+        X,
+        X_baseline,
+        matching,
+        sample_size=1000,
+        shap_sample_size="auto",
     ):
         """
         Computes SHAP values for multiple instances using a set of joint probability weights.
 
         :param X: An array of instances to explain. Each instance is a separate data point.
         :param X_baseline: A dataset used as a reference or background distribution.
-        :param joint_probs: A matrix of joint probabilities, where each row corresponds to the
+        :param matching: A matrix of joint probabilities, where each row corresponds to the
                             probabilities for an instance in X, used to weight X_baseline.
         :param num_samples: The number of samples to draw from X_baseline for each instance in X.
         :return: A numpy array of SHAP values for each instance in X.
         """
+
         return np.array(
             [
                 self.weighted_explainer.explain_instance(
@@ -93,6 +114,6 @@ class JointProbabilityExplainer:
                     sample_size=sample_size,
                     shap_sample_size=shap_sample_size,
                 )
-                for x, weights in zip(X, joint_probs)
+                for x, weights in zip(X, matching)
             ]
         )
