@@ -1,27 +1,34 @@
 import ot
 import numpy as np
-
-from .base_matcher import BaseMatcher
+from abc import ABC, abstractmethod
 
 EPSILON = 1e-20
 # SHAP_SAMPLE_SIZE = 10000
 SHAP_SAMPLE_SIZE = "auto"
 
-class CounterfactualOptimalTransportPolicy(BaseMatcher):
-    def __init__(self, x_factual: np, x_counterfactual: np):
-        super().__init__(x_factual, x_counterfactual)
+class DataMatcher(ABC):
 
+    @abstractmethod
+    def match(self):
+        pass
+
+
+class OptimalTransportPolicy(DataMatcher):
+    def __init__(self, X_labeled: np, X_unlabeled: np):
+
+        self.X_labeled = X_labeled
+        self.X_unlabeled = X_unlabeled
         self.reg = 0   ## should input the reg 
-        # self.method = method
-        self.ot_cost = ot.dist(self.x_factual, self.x_counterfactual, p=2)
+        self.ot_cost = ot.dist(self.X_labeled, self.X_unlabeled, p=2)
         self.probs_matrix = 0
+        self.N = X_labeled.shape[0]
+        self.M = X_unlabeled.shape[0]
 
-    
     """Compute the prob_matrix of factual and counterfactual"""
-    def compute_prob_matrix_of_factual_and_counterfactual(self):
+    def match(self):
         if self.reg <= 0:
             self.probs_matrix = ot.emd(
-                np.ones(self.N) / self.N, np.ones(self.M) / self.M, self.ot_cost
+                np.ones(self.N) / self.N, np.ones(self.M) / self.M, self.ot_cost, numItermax=1000000
             )
         else:
             self.probs_matrix = ot.bregman.sinkhorn(
@@ -29,7 +36,7 @@ class CounterfactualOptimalTransportPolicy(BaseMatcher):
                 np.ones(self.M) / self.M,
                 self.ot_cost,
                 reg=self.reg,
-                numItermax=5000,
+                numItermax=1000000,
             )
         ot_matcher = self.convert_matrix_to_policy()
         return ot_matcher   
