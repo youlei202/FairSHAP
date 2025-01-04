@@ -46,6 +46,7 @@ class Experiment:
             y_test,
             X_unlabel,
             y_unlabel, 
+            dataset_name,
             ):
         self.orginal_model = orginal_model
         self.X_train = X_train
@@ -54,9 +55,13 @@ class Experiment:
         self.y_test = y_test
         self.X_unlabel = X_unlabel
         self.y_unlabel = y_unlabel
-
-
-
+        self.dataset_name = dataset_name
+        if self.dataset_name == 'german_credit':
+            self.target_name = 'Risk'
+        elif self.dataset_name == 'uci':
+            self.target_name = 'income'
+        else:
+            raise ValueError('dataset_name should be german_credit or uci')
     def get_result(
             self,
             sex_balance = False, 
@@ -150,6 +155,7 @@ class Experiment:
 
         其中match_method有三种， 'together','sex_separate','sex_cross'
         '''
+
         self.sex_balance = sex_balance
         self.proportion = proportion
         self.replacement = replacement
@@ -281,7 +287,7 @@ class Experiment:
             print(f"Total number of non-zero values across all varphis: {non_zero_count}")
 
             # self.limited_values_range = 0
-            self.limited_values_range = np.arange(1, non_zero_count, 50)
+            self.limited_values_range = np.arange(1, non_zero_count, 5)
             before_values = []
             after_values = []
             for action_number in self.limited_values_range:
@@ -303,7 +309,7 @@ class Experiment:
                 X_Train_New = pd.concat([x_train_with_target_sex0,x_train_with_target_sex1, x_copy], axis=0)
         
                 # Step 5: Train and evaluate model
-                target_name = 'income'
+                target_name = self.target_name
                 x = X_Train_New.drop(target_name, axis=1)
                 y = X_Train_New[target_name]
                 
@@ -406,7 +412,7 @@ class Experiment:
             print(f"Total number of non-zero values across all varphis: {non_zero_count}")
 
             # self.limited_values_range = 0
-            self.limited_values_range = np.arange(1, non_zero_count, 50)
+            self.limited_values_range = np.arange(1, non_zero_count, 5)
             before_values = []
             after_values = []
             for action_number in self.limited_values_range:
@@ -428,7 +434,7 @@ class Experiment:
                 X_Train_New = pd.concat([x_train_with_target_sex0,x_train_with_target_sex1, x_copy], axis=0)
         
                 # Step 5: Train and evaluate model
-                target_name = 'income'
+                target_name = self.target_name
                 x = X_Train_New.drop(target_name, axis=1)
                 y = X_Train_New[target_name]
                 
@@ -491,7 +497,7 @@ class Experiment:
         plot_index = 0
 
         # 迭代不同的 proportion 和 num_new_data 组合
-        for proportion in [0.4, 0.6, 0.8]:
+        for proportion in [0.2, 0.4, 0.6, 0.8]:
             for num_new_data in [1, 2, 3]:
                 # 获取当前的子图轴
                 ax = axes[plot_index // 3, plot_index % 3]
@@ -655,7 +661,7 @@ class Experiment:
         print(f"Total number of non-zero values across all varphis: {non_zero_count}")
 
         # self.limited_values_range = 0
-        self.limited_values_range = np.arange(1, non_zero_count, 50)
+        self.limited_values_range = np.arange(1, non_zero_count, 5)
         before_values = []
         after_values = []
         for action_number in self.limited_values_range:
@@ -677,7 +683,7 @@ class Experiment:
             X_Train_New = pd.concat([x_train_with_target, x_copy], axis=0)
       
             # Step 5: Train and evaluate model
-            target_name = 'income'
+            target_name = self.target_name
             x = X_Train_New.drop(target_name, axis=1)
             y = X_Train_New[target_name]
             
@@ -747,7 +753,7 @@ class Experiment:
         #     X_Train_New = pd.concat([X_Train_New, x_copies], axis=0)
 
         #     # Step 5: Train and evaluate model        
-        #     target_name = 'income'
+        #     target_name = self.target_name
         #     x = X_Train_New.drop(target_name, axis=1)
         #     y = X_Train_New[target_name]
             
