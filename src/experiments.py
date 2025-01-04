@@ -121,6 +121,350 @@ class Experiment:
         print(f'-----------------------------------------------------------------------------')
         return after_values
 
+
+
+
+
+
+
+
+
+    '''
+    把里面的一些method的输入参数进行修改,不要使用self.X_unlabel, 而是直接传入X_unlabel。
+    
+    这样可以在一开始把X_train和X_unlabel分成sex=0,1两个部分，然后把两个部分分别传进去，
+    分别构造两个df，再把这两个df合并起来，然后再进行后续的操作。这部分不属于sex balance，
+    这部分属于sex separate match，看看有没有效果。
+    '''
+    def get_sex_separate_nn_result(
+            self,
+            sex_balance = False, 
+            proportion = 0.5,
+            replacement = True, 
+            num_new_data = 3,
+            matcher = 'nn',
+            match_method = 'sex_separate'   # 'together','sex_separate','sex_cross'
+            ):
+        '''
+        这部分是把实验的结果进行输出，并且进行可视化。
+
+        其中match_method有三种， 'together','sex_separate','sex_cross'
+        '''
+        self.sex_balance = sex_balance
+        self.proportion = proportion
+        self.replacement = replacement
+        self.num_new_data = num_new_data
+        self.matcher = matcher
+        self.match_method = match_method
+
+
+        if self.match_method == 'together':
+            '''  1. 从X_unlabel中按照比例随机抽出num_new_data组数据  '''
+            random_picks = self.random_pick_groups(self.X_unlabel)    # dataframe type
+
+            '''  2. X_label分别与random_picks[0,1,2....,num_new_data-1]进行matching, 找到matching的数据  ''' 
+            matchings = self.get_matching(random_picks, self.X_train)   # matchings[0], matchings[1], matchings[2]...
+
+            # Set the sensitive variables, and initilize the fairness_explainer - 这里已经默认是sex, 其中男性是privilege group 
+            sen_att_name = ["sex"]
+            sen_att = [self.X_train.columns.get_loc(name) for name in sen_att_name]
+            priv_val = [1]
+            unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]
+            for sa_list, pv in zip(unpriv_dict, priv_val):
+                sa_list.remove(pv)
+            fairness_explainer = FairnessExplainer(
+                model=self.orginal_model, 
+                sen_att=sen_att, 
+                priv_val=priv_val, 
+                unpriv_dict=unpriv_dict
+                )
+
+            '''  3. 计算每组数据的fairness shapley value  '''
+            print(f'开始第3步, 计算每组数据的fairness shapley value')
+            fairness_shapley_values = self.get_fairness_shapley_values(self.X_train, random_picks, matchings, fairness_explainer)  # fairness_shapley_values[0], fairness_shapley_values[1], fairness_shapley_values[2]...
+
+            '''  4. 对shapely value不取绝对值, 然后把负值直接变成0, 然后在归一化, 得到新的varphi'''
+            print(f'开始第4步, 对shapely value不取绝对值, 然后把负值直接变成0, 然后在归一化, 得到新的varphi')
+            varphis = self.get_varphis(fairness_shapley_values, absolute_value=False)
+
+            '''  5. 计算q ---Use joint_prob to find the matching unlabeled data to each labeled data instance  '''
+            print(f'开始第5步, 计算q')
+            q = self.get_q(random_picks, matchings)
+
+            '''  6. 计算出总共可以修改的actions number, 并且把新的unlabel data整合好, 加入到X_train中, 返回合并后的数据
+                    重新训练模型, 并且评估性能 '''
+            print(f'开始第6步, 计算出总共可以修改的actions number, 并且把新的unlabel data整合好, 加入到X_train中, 返回合并后的数据, 重新训练模型, 并且评估性能')
+            x_train_with_target = pd.concat([self.X_train, self.y_train], axis=1)
+            new_synthetic_data, after_values = self.process_varphis_and_modify_x(varphis, q, x_train_with_target, action_number='test')
+
+        elif self.match_method == 'sex_separate': 
+            # 将 Sex 列等于 0 的样本分离
+            X_train_sex0 = self.X_train[self.X_train["sex"] == 0]
+            y_train_sex0 = self.y_train[self.X_train["sex"] == 0]
+            # 将 Sex 列等于 1 的样本分离
+            X_train_sex1 = self.X_train[self.X_train["sex"] == 1]
+            y_train_sex1 = self.y_train[self.X_train["sex"] == 1]
+
+            #将X_unlabel分成两部分
+            X_unlabel_sex0 = self.X_unlabel[self.X_unlabel["sex"] == 0]
+            X_unlabel_sex1 = self.X_unlabel[self.X_unlabel["sex"] == 1]
+            y_unlabel_sex0 = self.y_unlabel[self.X_unlabel["sex"] == 0]
+            y_unlabel_sex1 = self.y_unlabel[self.X_unlabel["sex"] == 1]
+
+            '''  1. 从X_unlabel中按照比例随机抽出num_new_data组数据  '''
+            random_picks_sex0 = self.random_pick_groups(X_unlabel_sex0)    # dataframe type
+            random_picks_sex1 = self.random_pick_groups(X_unlabel_sex1)    # dataframe type
+
+            '''  2. X_label分别与random_picks[0,1,2....,num_new_data-1]进行matching, 找到matching的数据  ''' 
+            matchings_sex0 = self.get_matching(random_picks_sex0, X_train_sex0)   # matchings_sex0[0], matchings_sex0[1], matchings_sex0[2]...
+            matchings_sex1 = self.get_matching(random_picks_sex1, X_train_sex1)   # matchings[0], matchings[1], matchings[2]...
+
+            # Set the sensitive variables, and initilize the fairness_explainer - 这里已经默认是sex, 其中男性是privilege group 
+            sen_att_name = ["sex"]
+            sen_att = [self.X_train.columns.get_loc(name) for name in sen_att_name]
+            priv_val = [1]
+            unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]
+            for sa_list, pv in zip(unpriv_dict, priv_val):
+                sa_list.remove(pv)
+            fairness_explainer = FairnessExplainer(
+                model=self.orginal_model, 
+                sen_att=sen_att, 
+                priv_val=priv_val, 
+                unpriv_dict=unpriv_dict
+                )
+
+            '''  3. 计算每组数据的fairness shapley value  '''
+            print(f'开始第3步, 计算每组数据的fairness shapley value')
+            fairness_shapley_values_sex0 = self.get_fairness_shapley_values(X_train_sex0, random_picks_sex0, matchings_sex0, fairness_explainer)  # fairness_shapley_values[0], fairness_shapley_values[1], fairness_shapley_values[2]...
+            fairness_shapley_values_sex1 = self.get_fairness_shapley_values(X_train_sex1, random_picks_sex1, matchings_sex1, fairness_explainer)  # fairness_shapley_values[0], fairness_shapley_values[1], fairness_shapley_values[2]...
+
+            '''  4. 对shapely value不取绝对值, 然后把负值直接变成0, 然后在归一化, 得到新的varphi'''
+            print(f'开始第4步, 对shapely value不取绝对值, 然后把负值直接变成0, 然后在归一化, 得到新的varphi')
+            varphis_sex0 = self.get_varphis(fairness_shapley_values_sex0, absolute_value=False)
+            varphis_sex1 = self.get_varphis(fairness_shapley_values_sex1, absolute_value=False)
+            '''  5. 计算q ---Use joint_prob to find the matching unlabeled data to each labeled data instance  '''
+            print(f'开始第5步, 计算q')
+            q_sex0 = self.get_q(random_picks_sex0, matchings_sex0)
+            q_sex1 = self.get_q(random_picks_sex1, matchings_sex1)
+
+            '''  6. 计算出总共可以修改的actions number, 并且把新的unlabel data整合好, 加入到X_train中, 返回合并后的数据
+                    重新训练模型, 并且评估性能 '''
+            print(f'开始第6步, 计算出总共可以修改的actions number, 并且把新的unlabel data整合好, 加入到X_train中, 返回合并后的数据, 重新训练模型, 并且评估性能')
+            x_train_with_target_sex0 = pd.concat([X_train_sex0, y_train_sex0], axis=1)
+            x_train_with_target_sex1 = pd.concat([X_train_sex1, y_train_sex1], axis=1)
+
+
+            '''
+            下面把sex=0, sex=1数据合成一起
+            '''
+            for i in range(self.num_new_data):
+                if i == 0:
+                    x_copy_sex0 = x_train_with_target_sex0.copy()
+                    x_copy_sex1 = x_train_with_target_sex1.copy()
+                    varphi_combined_sex0 = varphis_sex0[i]
+                    varphi_combined_sex1 = varphis_sex1[i]
+                    q_combined_sex0 = q_sex0[i]
+                    q_combined_sex1 = q_sex1[i]
+                else:
+                    x_copy_sex0 = pd.concat([x_train_with_target_sex0, x_copy_sex0], axis=0)
+                    x_copy_sex1 = pd.concat([x_train_with_target_sex1, x_copy_sex1], axis=0)
+                    varphi_combined_sex0 = np.vstack([varphi_combined_sex0, varphis_sex0[i]])
+                    varphi_combined_sex1 = np.vstack([varphi_combined_sex1, varphis_sex1[i]])
+                    q_combined_sex0 = np.vstack([q_combined_sex0, q_sex0[i]])
+                    q_combined_sex1 = np.vstack([q_combined_sex1, q_sex1[i]])
+            
+            x_copy = pd.concat([x_copy_sex0, x_copy_sex1], axis=0)
+            varphi_combined = np.vstack([varphi_combined_sex0, varphi_combined_sex1])
+            q_combined = np.vstack([q_combined_sex0, q_combined_sex1])
+
+            non_zero_count = (varphi_combined != 0).sum().sum()
+            print(f"Total number of non-zero values across all varphis: {non_zero_count}")
+
+            # self.limited_values_range = 0
+            self.limited_values_range = np.arange(1, non_zero_count, 50)
+            before_values = []
+            after_values = []
+            for action_number in self.limited_values_range:
+
+
+                # Step 1: 将 varphi_combined 的值和位置展开为一维
+                flat_varphi = [(value, row, col) for row, row_vals in enumerate(varphi_combined)
+                            for col, value in enumerate(row_vals)]
+
+                # Step 2: 按值降序排序
+                flat_varphi_sorted = sorted(flat_varphi, key=lambda x: x[0], reverse=True)
+
+                # Step 3: 挑出前 action_number 个数的位置
+                top_positions = flat_varphi_sorted[:action_number]
+
+                # Step 4: 替换 X 中前三列的值为 S 中对应位置的值
+                for value, row_idx, col_idx in top_positions:
+                    x_copy.iloc[row_idx, col_idx] = q_combined[row_idx, col_idx]
+                X_Train_New = pd.concat([x_train_with_target_sex0,x_train_with_target_sex1, x_copy], axis=0)
+        
+                # Step 5: Train and evaluate model
+                target_name = 'income'
+                x = X_Train_New.drop(target_name, axis=1)
+                y = X_Train_New[target_name]
+                
+                model_new = XGBClassifier()
+                model_new.fit(x, y)
+                
+                # 计算fairness values
+                sen_att_name = ["sex"]
+                sen_att = [self.X_train.columns.get_loc(name) for name in sen_att_name]
+                priv_val = [1]
+                unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]
+                for sa_list, pv in zip(unpriv_dict, priv_val):
+                    sa_list.remove(pv)
+
+                after = fairness_value_function(sen_att, priv_val, unpriv_dict, self.X_test.values, model_new)
+                after_values.append(after)
+
+
+        elif self.match_method == 'sex_cross':
+            # 将 Sex 列等于 0 的样本分离
+            X_train_sex0 = self.X_train[self.X_train["sex"] == 0]
+            y_train_sex0 = self.y_train[self.X_train["sex"] == 0]
+            # 将 Sex 列等于 1 的样本分离
+            X_train_sex1 = self.X_train[self.X_train["sex"] == 1]
+            y_train_sex1 = self.y_train[self.X_train["sex"] == 1]
+
+            #将X_unlabel分成两部分
+            X_unlabel_sex0 = self.X_unlabel[self.X_unlabel["sex"] == 0]
+            X_unlabel_sex1 = self.X_unlabel[self.X_unlabel["sex"] == 1]
+            y_unlabel_sex0 = self.y_unlabel[self.X_unlabel["sex"] == 0]
+            y_unlabel_sex1 = self.y_unlabel[self.X_unlabel["sex"] == 1]
+
+            '''  1. 从X_unlabel中按照比例随机抽出num_new_data组数据  '''
+            random_picks_sex0 = self.random_pick_groups(X_unlabel_sex0)    # dataframe type
+            random_picks_sex1 = self.random_pick_groups(X_unlabel_sex1)    # dataframe type
+
+            '''  2. X_label分别与random_picks[0,1,2....,num_new_data-1]进行matching, 找到matching的数据  ''' 
+            matchings_sex0 = self.get_matching(random_picks_sex1, X_train_sex0)   # original sex0 与 x_unlabel sex1匹配
+            matchings_sex1 = self.get_matching(random_picks_sex0, X_train_sex1)   # original sex1 与 x_unlabel sex0匹配
+
+            # Set the sensitive variables, and initilize the fairness_explainer - 这里已经默认是sex, 其中男性是privilege group 
+            sen_att_name = ["sex"]
+            sen_att = [self.X_train.columns.get_loc(name) for name in sen_att_name]
+            priv_val = [1]
+            unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]
+            for sa_list, pv in zip(unpriv_dict, priv_val):
+                sa_list.remove(pv)
+            fairness_explainer = FairnessExplainer(
+                model=self.orginal_model, 
+                sen_att=sen_att, 
+                priv_val=priv_val, 
+                unpriv_dict=unpriv_dict
+                )
+
+            '''  3. 计算每组数据的fairness shapley value  '''
+            print(f'开始第3步, 计算每组数据的fairness shapley value')
+            fairness_shapley_values_sex0 = self.get_fairness_shapley_values(X_train_sex0, random_picks_sex1, matchings_sex0, fairness_explainer)  # fairness_shapley_values[0], fairness_shapley_values[1], fairness_shapley_values[2]...
+            fairness_shapley_values_sex1 = self.get_fairness_shapley_values(X_train_sex1, random_picks_sex0, matchings_sex1, fairness_explainer)  # fairness_shapley_values[0], fairness_shapley_values[1], fairness_shapley_values[2]...
+
+            '''  4. 对shapely value不取绝对值, 然后把负值直接变成0, 然后在归一化, 得到新的varphi'''
+            print(f'开始第4步, 对shapely value不取绝对值, 然后把负值直接变成0, 然后在归一化, 得到新的varphi')
+            varphis_sex0 = self.get_varphis(fairness_shapley_values_sex0, absolute_value=False)
+            varphis_sex1 = self.get_varphis(fairness_shapley_values_sex1, absolute_value=False)
+            '''  5. 计算q ---Use joint_prob to find the matching unlabeled data to each labeled data instance  '''
+            print(f'开始第5步, 计算q')
+            q_sex0 = self.get_q(random_picks_sex1, matchings_sex0)  #与sex=0相匹配的，sex=1的unlabel data
+            q_sex1 = self.get_q(random_picks_sex0, matchings_sex1)  #与sex=1相匹配的，sex=0的unlabel data
+
+            '''  6. 计算出总共可以修改的actions number, 并且把新的unlabel data整合好, 加入到X_train中, 返回合并后的数据
+                    重新训练模型, 并且评估性能 '''
+            print(f'开始第6步, 计算出总共可以修改的actions number, 并且把新的unlabel data整合好, 加入到X_train中, 返回合并后的数据, 重新训练模型, 并且评估性能')
+            x_train_with_target_sex0 = pd.concat([X_train_sex0, y_train_sex0], axis=1)
+            x_train_with_target_sex1 = pd.concat([X_train_sex1, y_train_sex1], axis=1)
+
+
+            '''
+            下面把sex=0, sex=1数据合成一起
+            '''
+            for i in range(self.num_new_data):
+                if i == 0:
+                    x_copy_sex0 = x_train_with_target_sex0.copy()
+                    x_copy_sex1 = x_train_with_target_sex1.copy()
+                    varphi_combined_sex0 = varphis_sex0[i]
+                    varphi_combined_sex1 = varphis_sex1[i]
+                    q_combined_sex0 = q_sex0[i]
+                    q_combined_sex1 = q_sex1[i]
+                else:
+                    x_copy_sex0 = pd.concat([x_train_with_target_sex0, x_copy_sex0], axis=0)
+                    x_copy_sex1 = pd.concat([x_train_with_target_sex1, x_copy_sex1], axis=0)
+                    varphi_combined_sex0 = np.vstack([varphi_combined_sex0, varphis_sex0[i]])
+                    varphi_combined_sex1 = np.vstack([varphi_combined_sex1, varphis_sex1[i]])
+                    q_combined_sex0 = np.vstack([q_combined_sex0, q_sex0[i]])
+                    q_combined_sex1 = np.vstack([q_combined_sex1, q_sex1[i]])
+            
+            x_copy = pd.concat([x_copy_sex0, x_copy_sex1], axis=0)
+            varphi_combined = np.vstack([varphi_combined_sex0, varphi_combined_sex1])
+            q_combined = np.vstack([q_combined_sex0, q_combined_sex1])
+
+            non_zero_count = (varphi_combined != 0).sum().sum()
+            print(f"Total number of non-zero values across all varphis: {non_zero_count}")
+
+            # self.limited_values_range = 0
+            self.limited_values_range = np.arange(1, non_zero_count, 50)
+            before_values = []
+            after_values = []
+            for action_number in self.limited_values_range:
+
+
+                # Step 1: 将 varphi_combined 的值和位置展开为一维
+                flat_varphi = [(value, row, col) for row, row_vals in enumerate(varphi_combined)
+                            for col, value in enumerate(row_vals)]
+
+                # Step 2: 按值降序排序
+                flat_varphi_sorted = sorted(flat_varphi, key=lambda x: x[0], reverse=True)
+
+                # Step 3: 挑出前 action_number 个数的位置
+                top_positions = flat_varphi_sorted[:action_number]
+
+                # Step 4: 替换 X 中前三列的值为 S 中对应位置的值
+                for value, row_idx, col_idx in top_positions:
+                    x_copy.iloc[row_idx, col_idx] = q_combined[row_idx, col_idx]
+                X_Train_New = pd.concat([x_train_with_target_sex0,x_train_with_target_sex1, x_copy], axis=0)
+        
+                # Step 5: Train and evaluate model
+                target_name = 'income'
+                x = X_Train_New.drop(target_name, axis=1)
+                y = X_Train_New[target_name]
+                
+                model_new = XGBClassifier()
+                model_new.fit(x, y)
+                
+                # 计算fairness values
+                sen_att_name = ["sex"]
+                sen_att = [self.X_train.columns.get_loc(name) for name in sen_att_name]
+                priv_val = [1]
+                unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]
+                for sa_list, pv in zip(unpriv_dict, priv_val):
+                    sa_list.remove(pv)
+
+                after = fairness_value_function(sen_att, priv_val, unpriv_dict, self.X_test.values, model_new)
+                after_values.append(after)
+
+        else:
+            raise ValueError('match_method should be together, sex_separate, sex_cross')
+        print(f'Proporation: {self.proportion}, new_data_number: {self.num_new_data} 训练结束, match_method:{self.match_method},DR值已经保存, 可以进行可视化')
+        print(f'-----------------------------------------------------------------------------')
+        return after_values
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def visualize(self, after_values):
         # after_values = self.get_result()
         plt.scatter(self.limited_values_range, after_values, label='New model', marker='x')
@@ -132,7 +476,7 @@ class Experiment:
         plt.show()
 
 
-    def combination(self):
+    def combination(self, match_met):
         '''
         这部分是把不同的proportion, 以及不同的num_new_data组合起来, 然后进行实验。
         '''
@@ -140,25 +484,26 @@ class Experiment:
         results = {}
 
         # 创建一个 4x3 的子图布局
-        fig, axes = plt.subplots(4, 3, figsize=(15, 20))
+        fig, axes = plt.subplots(4, 3, figsize=(12, 16))
         fig.suptitle("Fairness Value vs. Limited Actions for Different Parameters", fontsize=16)
 
         # 用于跟踪当前子图的位置
         plot_index = 0
 
         # 迭代不同的 proportion 和 num_new_data 组合
-        for proportion in [0.2, 0.4, 0.6, 0.8]:
+        for proportion in [0.4, 0.6, 0.8]:
             for num_new_data in [1, 2, 3]:
                 # 获取当前的子图轴
                 ax = axes[plot_index // 3, plot_index % 3]
 
                 # 使用 get_result() 获取结果
-                after_values = self.get_result(
+                after_values = self.get_sex_separate_nn_result(
                     sex_balance=False,
                     proportion=proportion,
                     replacement=True,
                     num_new_data=num_new_data,
-                    matcher='nn'
+                    matcher='nn',
+                    match_method=match_met
                 )
 
                 # 保存结果到字典中
@@ -170,17 +515,13 @@ class Experiment:
                 ax.set_title(f'Proportion: {proportion}, Num New Data: {num_new_data}', fontsize=10)
                 ax.set_xlabel('Limited actions')
                 ax.set_ylabel('DR Value')
-                ax.legend()
-                
+                ax.legend()    
                 # 更新子图索引
                 plot_index += 1
-
         # 自动调整子图布局
         plt.tight_layout(rect=[0, 0, 1, 0.95])  # rect 调整避免标题重叠
-
         # 显示图表
         plt.show()
-
         return results
 
 
@@ -212,16 +553,16 @@ class Experiment:
 
 
 
-    def random_pick_groups(self):
+    def random_pick_groups(self, X_unlabel):
 
         if self.replacement == True:
             # calculate the sample size
-            sample_size = int(len(self.X_unlabel) * self.proportion)
+            sample_size = int(len(X_unlabel) * self.proportion)
             # random pick
             group_num = self.num_new_data
             random_picks = []
             for i in range(group_num):
-                random_pick = self.X_unlabel.sample(n=sample_size, random_state=25+i)
+                random_pick = X_unlabel.sample(n=sample_size, random_state=25+i)
                 random_picks.append(random_pick)
         else:
             raise ValueError('replacement should be True')
@@ -229,26 +570,26 @@ class Experiment:
 
 
 
-    def get_matching(self, random_pick):
+    def get_matching(self, random_pick, X_train):
         matchings = []
         for i in range(self.num_new_data):
             if self.matcher == 'nn':
-                matching = NearestNeighborDataMatcher(X_labeled=self.X_train, X_unlabeled=random_pick[i]).match(n_neighbors=1)
+                matching = NearestNeighborDataMatcher(X_labeled=X_train, X_unlabeled=random_pick[i]).match(n_neighbors=1)
                 matchings.append(matching)
 
             elif self.matcher == 'ot':
-                matching = OptimalTransportPolicy(X_labeled=self.X_train, X_unlabeled=random_pick[i]).match(n_neighbors=1)
+                matching = OptimalTransportPolicy(X_labeled=X_train, X_unlabeled=random_pick[i]).match(n_neighbors=1)
                 matchings.append(matching)
             else:
                 raise ValueError('matcher should be nn or ot')
         return tuple(matchings)
 
-    def get_fairness_shapley_values(self,random_picks, matchings, fairness_explainer):
+    def get_fairness_shapley_values(self, X_train, random_picks, matchings, fairness_explainer):
         fairness_shapley_values = []
         breakpoint()
         for i in range(self.num_new_data):
             fairness_shapley_value = fairness_explainer.shap_values(
-                                        X = self.X_train.values,
+                                        X = X_train.values,
                                         X_baseline = random_picks[i].values,
                                         matching=matchings[i],
                                         sample_size=500,
