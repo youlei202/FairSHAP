@@ -5,7 +5,7 @@ import copy
 from typing import Tuple, List, Dict
 from xgboost import XGBClassifier
 import pdb
-
+from sklearn.metrics import accuracy_score
 from src.matching.ot_matcher import OptimalTransportPolicy
 from src.matching.nn_matcher import NearestNeighborDataMatcher
 from src.attribution import FairnessExplainer
@@ -13,7 +13,7 @@ from src.composition.data_composer import DataComposer
 from src.attribution.oracle_metric import perturb_numpy_ver
 
 EPSILON = 1e-20
-ORIGINAL_DR = 0.05939711630344391
+# ORIGINAL_DR = 0.05939711630344391
 
 class Experiment:
     """
@@ -58,8 +58,11 @@ class Experiment:
         self.dataset_name = dataset_name
         if self.dataset_name == 'german_credit':
             self.target_name = 'Risk'
+            self.original_DR =  0.010580012574791908
+
         elif self.dataset_name == 'uci':
             self.target_name = 'income'
+            self.original_DR = 0.05939711630344391
         else:
             raise ValueError('dataset_name should be german_credit or uci')
     def get_result(
@@ -201,7 +204,7 @@ class Experiment:
                     重新训练模型, 并且评估性能 '''
             print(f'开始第6步, 计算出总共可以修改的actions number, 并且把新的unlabel data整合好, 加入到X_train中, 返回合并后的数据, 重新训练模型, 并且评估性能')
             x_train_with_target = pd.concat([self.X_train, self.y_train], axis=1)
-            new_synthetic_data, after_values = self.process_varphis_and_modify_x(varphis, q, x_train_with_target, action_number='test')
+            new_synthetic_data, after_values, fairness_accuracy_pairs = self.process_varphis_and_modify_x(varphis, q, x_train_with_target, action_number='test')
 
         elif self.match_method == 'sex_separate': 
             # 将 Sex 列等于 0 的样本分离
@@ -287,9 +290,10 @@ class Experiment:
             print(f"Total number of non-zero values across all varphis: {non_zero_count}")
 
             # self.limited_values_range = 0
-            self.limited_values_range = np.arange(1, non_zero_count, 5)
+            self.limited_values_range = np.arange(1, non_zero_count, 1)
             before_values = []
             after_values = []
+            fairness_accuracy_pairs = []
             for action_number in self.limited_values_range:
 
 
@@ -326,6 +330,12 @@ class Experiment:
 
                 after = fairness_value_function(sen_att, priv_val, unpriv_dict, self.X_test.values, model_new)
                 after_values.append(after)
+                
+                if after < self.original_DR:
+                    y_new_pred = model_new.predict(self.X_test)
+                    accuracy_new = accuracy_score(self.y_test, y_new_pred)
+                    fairness_accuracy_pairs.append((after, accuracy_new, action_number))
+    
 
 
         elif self.match_method == 'sex_cross':
@@ -412,9 +422,9 @@ class Experiment:
             print(f"Total number of non-zero values across all varphis: {non_zero_count}")
 
             # self.limited_values_range = 0
-            self.limited_values_range = np.arange(1, non_zero_count, 5)
-            before_values = []
+            self.limited_values_range = np.arange(1, non_zero_count, 1)
             after_values = []
+            fairness_accuracy_pairs = []
             for action_number in self.limited_values_range:
 
 
@@ -448,15 +458,19 @@ class Experiment:
                 unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]
                 for sa_list, pv in zip(unpriv_dict, priv_val):
                     sa_list.remove(pv)
-
                 after = fairness_value_function(sen_att, priv_val, unpriv_dict, self.X_test.values, model_new)
                 after_values.append(after)
+                if after < self.original_DR:
+                    y_new_pred = model_new.predict(self.X_test)
+                    accuracy_new = accuracy_score(self.y_test, y_new_pred)
+                    fairness_accuracy_pairs.append((after, accuracy_new, action_number))  # Store both values as a tuple
+                
 
         else:
             raise ValueError('match_method should be together, sex_separate, sex_cross')
         print(f'Proporation: {self.proportion}, new_data_number: {self.num_new_data} 训练结束, match_method:{self.match_method},DR值已经保存, 可以进行可视化')
         print(f'-----------------------------------------------------------------------------')
-        return after_values
+        return after_values, fairness_accuracy_pairs
 
 
 
@@ -474,7 +488,7 @@ class Experiment:
     def visualize(self, after_values):
         # after_values = self.get_result()
         plt.scatter(self.limited_values_range, after_values, label='New model', marker='x')
-        plt.axhline(y=ORIGINAL_DR, color='r', linestyle='--', label='Original DR')
+        plt.axhline(y=self.original_DR, color='r', linestyle='--', label='Original DR')
         plt.xlabel('Limited actions')
         plt.ylabel('DR Value')
         plt.title('Fairness Value vs. Limited Values')
@@ -488,22 +502,26 @@ class Experiment:
         '''
         # 保存结果
         results = {}
-
-        # 创建一个 4x3 的子图布局
-        fig, axes = plt.subplots(4, 3, figsize=(12, 16))
-        fig.suptitle("Fairness Value vs. Limited Actions for Different Parameters", fontsize=16)
-
+        
+        # 创建两个 4x3 的子图布局
+        fig1, axes1 = plt.subplots(4, 3, figsize=(10, 12))
+        fig1.suptitle("Fairness Value vs. Limited Actions for Different Parameters", fontsize=16)
+        
+        fig2, axes2 = plt.subplots(4, 3, figsize=(10, 12))
+        fig2.suptitle("Fairness-Accuracy Trade-off for Different Parameters", fontsize=16)
+        
         # 用于跟踪当前子图的位置
         plot_index = 0
-
+        
         # 迭代不同的 proportion 和 num_new_data 组合
         for proportion in [0.2, 0.4, 0.6, 0.8]:
             for num_new_data in [1, 2, 3]:
                 # 获取当前的子图轴
-                ax = axes[plot_index // 3, plot_index % 3]
-
+                ax1 = axes1[plot_index // 3, plot_index % 3]
+                ax2 = axes2[plot_index // 3, plot_index % 3]
+                
                 # 使用 get_result() 获取结果
-                after_values = self.get_sex_separate_nn_result(
+                after_values, fairness_accuracy_pairs = self.get_sex_separate_nn_result(
                     sex_balance=False,
                     proportion=proportion,
                     replacement=True,
@@ -511,23 +529,57 @@ class Experiment:
                     matcher='nn',
                     match_method=match_met
                 )
-
+                
                 # 保存结果到字典中
                 results[(proportion, num_new_data)] = after_values
-
-                # 在当前子图上绘制结果
-                ax.scatter(self.limited_values_range, after_values, label='New model', marker='x')
-                ax.axhline(y=ORIGINAL_DR, color='r', linestyle='--', label='Original DR')
-                ax.set_title(f'Proportion: {proportion}, Num New Data: {num_new_data}', fontsize=10)
-                ax.set_xlabel('Limited actions')
-                ax.set_ylabel('DR Value')
-                ax.legend()    
+                
+                # 在第一个图的子图上绘制原始结果
+                ax1.scatter(self.limited_values_range, after_values, label='New model', marker='x')
+                ax1.axhline(y=self.original_DR, color='r', linestyle='--', label='Original DR')
+                ax1.set_title(f'Proportion: {proportion}, Num New Data: {num_new_data}', fontsize=10)
+                ax1.set_xlabel('Limited actions')
+                ax1.set_ylabel('DR Value')
+                ax1.legend()
+                
+                # 在第二个图的子图上绘制fairness-accuracy散点图
+                if fairness_accuracy_pairs:  # 确保有数据可画
+                    fairness_values, accuracy_values, action_numbers = zip(*fairness_accuracy_pairs)
+                    
+                    # 创建颜色映射
+                    min_action = min(action_numbers)
+                    max_action = max(action_numbers)
+                    norm = plt.Normalize(min_action, max_action)
+                    
+                    # 创建从淡黄色到黑色的颜色映射
+                    cmap = plt.cm.YlOrBr  # YlOrBr colormap: 从淡黄色过渡到深褐色/黑色
+                    
+                    # 绘制散点图，使用圆形标记和颜色映射
+                    scatter = ax2.scatter(accuracy_values, fairness_values, 
+                                        c=action_numbers, 
+                                        cmap=cmap, 
+                                        norm=norm,
+                                        marker='o',  # 使用圆形标记
+                                        alpha=0.6)
+                    
+                    # 添加颜色条
+                    cbar = plt.colorbar(scatter, ax=ax2)
+                    cbar.set_label('Action Number')
+                    
+                    ax2.set_title(f'Proportion: {proportion}, Num New Data: {num_new_data}', fontsize=10)
+                    ax2.set_xlabel('Accuracy')
+                    ax2.set_ylabel('Fairness Value')
+                    ax2.grid(True, linestyle='--', alpha=0.7)
+                
                 # 更新子图索引
                 plot_index += 1
-        # 自动调整子图布局
-        plt.tight_layout(rect=[0, 0, 1, 0.95])  # rect 调整避免标题重叠
+        
+        # 自动调整两个图的子图布局
+        fig1.tight_layout(rect=[0, 0, 1, 0.95])  # rect 调整避免标题重叠
+        fig2.tight_layout(rect=[0, 0, 1, 0.95])
+        
         # 显示图表
         plt.show()
+        
         return results
 
 
@@ -661,9 +713,10 @@ class Experiment:
         print(f"Total number of non-zero values across all varphis: {non_zero_count}")
 
         # self.limited_values_range = 0
-        self.limited_values_range = np.arange(1, non_zero_count, 5)
+        self.limited_values_range = np.arange(1, non_zero_count, 1)
         before_values = []
         after_values = []
+        fairness_accuracy_pairs = []
         for action_number in self.limited_values_range:
 
 
@@ -700,8 +753,12 @@ class Experiment:
 
             after = fairness_value_function(sen_att, priv_val, unpriv_dict, self.X_test.values, model_new)
             after_values.append(after)
+            if after < self.original_DR:
+                y_new_pred = model_new.predict(self.X_test)
+                accuracy_new = accuracy_score(self.y_test, y_new_pred)
+                fairness_accuracy_pairs.append((after, accuracy_new, action_number))
 
-        return X_Train_New, after_values
+        return X_Train_New, after_values, fairness_accuracy_pairs
 
         ''' 
         这里varphi_combined是一个dataframe

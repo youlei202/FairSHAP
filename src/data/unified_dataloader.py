@@ -3,6 +3,12 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder, OneHotEncoder
 import copy
+import pandas as pd
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report
 
 def load_dataset(dataset_name):
     """
@@ -33,21 +39,49 @@ def load_dataset(dataset_name):
 
 
 def german_credit():
-
     '''Load the German Credit dataset and preprocess it.'''
 
-    original_data = pd.read_csv('dataset/german_credit/german_credit.csv')
-    processed_data = original_data.copy()
-    target = 'Risk'
-    # encode categorical variables, Risk is encoded as 1 (bad) and 0 (good)
-    label_encoders = {}
-    for column in processed_data.select_dtypes(include=['object']).columns:
-        if column != target:
-            label_encoders[column] = LabelEncoder()
-            processed_data[column] = label_encoders[column].fit_transform(processed_data[column])
-        else:
-            processed_data[target] = processed_data[target].map({'good': 0, 'bad': 1})
-    return original_data, processed_data
+    # 加载数据
+    data = pd.read_csv('dataset/german_credit/german_credit.csv')
+    original_data = data.copy()
+
+    # 打印每列的缺失值数量
+    missing_values = data.isnull().sum()
+    print(missing_values)
+
+    # 处理缺失值
+    saving_imputer = SimpleImputer(strategy='most_frequent')
+    checking_imputer = SimpleImputer(strategy='most_frequent')
+    data['Saving accounts'] = saving_imputer.fit_transform(data[['Saving accounts']]).ravel()
+    data['Checking account'] = checking_imputer.fit_transform(data[['Checking account']]).ravel()
+
+    # 1. 标准化连续变量
+    scaler = StandardScaler()
+    data[['Age', 'Credit amount', 'Duration']] = scaler.fit_transform(data[['Age', 'Credit amount', 'Duration']])
+
+    # 2. 性别变量编码
+    data['Sex'] = data['Sex'].map({'male': 0, 'female': 1})
+
+    # 3. 分类变量独热编码
+    categorical_columns = ['Job', 'Housing', 'Saving accounts', 'Checking account', 'Purpose']
+    data = pd.get_dummies(data, columns=categorical_columns, drop_first=False)
+
+    # 将独热编码的布尔值转为数值
+    for column in data.select_dtypes(include=['bool']).columns:
+        data[column] = data[column].astype(int)
+
+    # 4. 目标变量映射
+    data['Risk'] = data['Risk'].map({'good': 0, 'bad': 1})
+
+    # 将 Risk 列移动到最后一列
+    risk_column = data.pop('Risk')
+    data['Risk'] = risk_column
+
+    # 重命名性别列
+    data.rename(columns={'Sex': 'sex'}, inplace=True)
+
+    return original_data, data
+
 
 def uci():
     
@@ -101,10 +135,10 @@ def uci():
     return original_data, df_processed
 
 if __name__ == '__main__':
-    # a, b =german_credit()
-    # print(a)
-    # print(b)
+    a, b =german_credit()
+    print(a)
+    print(b)
 
-    c, d = uci()
-    print(c)
-    print(d)
+    # c, d = uci()
+    # print(c)
+    # print(d)
