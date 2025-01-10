@@ -290,7 +290,7 @@ class Experiment:
             print(f"Total number of non-zero values across all varphis: {non_zero_count}")
 
             # self.limited_values_range = 0
-            self.limited_values_range = np.arange(1, non_zero_count, 1)
+            self.limited_values_range = np.arange(1, non_zero_count, 50)
             before_values = []
             after_values = []
             fairness_accuracy_pairs = []
@@ -422,7 +422,7 @@ class Experiment:
             print(f"Total number of non-zero values across all varphis: {non_zero_count}")
 
             # self.limited_values_range = 0
-            self.limited_values_range = np.arange(1, non_zero_count, 1)
+            self.limited_values_range = np.arange(1, non_zero_count, 50)
             after_values = []
             fairness_accuracy_pairs = []
             for action_number in self.limited_values_range:
@@ -713,7 +713,7 @@ class Experiment:
         print(f"Total number of non-zero values across all varphis: {non_zero_count}")
 
         # self.limited_values_range = 0
-        self.limited_values_range = np.arange(1, non_zero_count, 1)
+        self.limited_values_range = np.arange(1, non_zero_count, 50)
         before_values = []
         after_values = []
         fairness_accuracy_pairs = []

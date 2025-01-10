@@ -47,7 +47,7 @@ def german_credit():
 
     # 打印每列的缺失值数量
     missing_values = data.isnull().sum()
-    print(missing_values)
+    # print(missing_values)
 
     # 处理缺失值
     saving_imputer = SimpleImputer(strategy='most_frequent')
