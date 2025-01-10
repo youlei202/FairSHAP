@@ -59,10 +59,16 @@ class Experiment:
         if self.dataset_name == 'german_credit':
             self.target_name = 'Risk'
             self.original_DR =  0.010580012574791908
+            self.gap = 1
 
         elif self.dataset_name == 'uci':
             self.target_name = 'income'
             self.original_DR = 0.05939711630344391
+            self.gap =50
+        elif self.dataset_name == 'census_income_kdd':
+            self.target_name = 'class'
+            self.original_DR = 0.08210
+            self.gap = 100
         else:
             raise ValueError('dataset_name should be german_credit or uci')
     def get_result(
@@ -290,7 +296,7 @@ class Experiment:
             print(f"Total number of non-zero values across all varphis: {non_zero_count}")
 
             # self.limited_values_range = 0
-            self.limited_values_range = np.arange(1, non_zero_count, 50)
+            self.limited_values_range = np.arange(1, non_zero_count, self.gap)
             before_values = []
             after_values = []
             fairness_accuracy_pairs = []
@@ -422,7 +428,7 @@ class Experiment:
             print(f"Total number of non-zero values across all varphis: {non_zero_count}")
 
             # self.limited_values_range = 0
-            self.limited_values_range = np.arange(1, non_zero_count, 50)
+            self.limited_values_range = np.arange(1, non_zero_count, self.gap)
             after_values = []
             fairness_accuracy_pairs = []
             for action_number in self.limited_values_range:
@@ -502,24 +508,34 @@ class Experiment:
         '''
         # 保存结果
         results = {}
-        
-        # 创建两个 4x3 的子图布局
-        fig1, axes1 = plt.subplots(4, 3, figsize=(10, 12))
+
+        # 根据数据集名称确定迭代范围和子图布局
+        if self.dataset_name == 'census_income_kdd':
+            proportions = [0.4, 0.6, 0.8]
+            num_new_data_values = [1, 2, 3]
+            rows, cols = 3, 3
+        else:
+            proportions = [0.2, 0.4, 0.6, 0.8]
+            num_new_data_values = [1, 2, 3]
+            rows, cols = 4, 3
+
+        # 创建子图布局
+        fig1, axes1 = plt.subplots(rows, cols, figsize=(10, 12))
         fig1.suptitle("Fairness Value vs. Limited Actions for Different Parameters", fontsize=16)
-        
-        fig2, axes2 = plt.subplots(4, 3, figsize=(10, 12))
+
+        fig2, axes2 = plt.subplots(rows, cols, figsize=(10, 12))
         fig2.suptitle("Fairness-Accuracy Trade-off for Different Parameters", fontsize=16)
-        
+
         # 用于跟踪当前子图的位置
         plot_index = 0
-        
+
         # 迭代不同的 proportion 和 num_new_data 组合
-        for proportion in [0.2, 0.4, 0.6, 0.8]:
-            for num_new_data in [1, 2, 3]:
+        for proportion in proportions:
+            for num_new_data in num_new_data_values:
                 # 获取当前的子图轴
-                ax1 = axes1[plot_index // 3, plot_index % 3]
-                ax2 = axes2[plot_index // 3, plot_index % 3]
-                
+                ax1 = axes1[plot_index // cols, plot_index % cols]
+                ax2 = axes2[plot_index // cols, plot_index % cols]
+
                 # 使用 get_result() 获取结果
                 after_values, fairness_accuracy_pairs = self.get_sex_separate_nn_result(
                     sex_balance=False,
@@ -529,10 +545,10 @@ class Experiment:
                     matcher='nn',
                     match_method=match_met
                 )
-                
+
                 # 保存结果到字典中
                 results[(proportion, num_new_data)] = after_values
-                
+
                 # 在第一个图的子图上绘制原始结果
                 ax1.scatter(self.limited_values_range, after_values, label='New model', marker='x')
                 ax1.axhline(y=self.original_DR, color='r', linestyle='--', label='Original DR')
@@ -540,19 +556,19 @@ class Experiment:
                 ax1.set_xlabel('Limited actions')
                 ax1.set_ylabel('DR Value')
                 ax1.legend()
-                
+
                 # 在第二个图的子图上绘制fairness-accuracy散点图
                 if fairness_accuracy_pairs:  # 确保有数据可画
                     fairness_values, accuracy_values, action_numbers = zip(*fairness_accuracy_pairs)
-                    
+
                     # 创建颜色映射
                     min_action = min(action_numbers)
                     max_action = max(action_numbers)
                     norm = plt.Normalize(min_action, max_action)
-                    
+
                     # 创建从淡黄色到黑色的颜色映射
                     cmap = plt.cm.YlOrBr  # YlOrBr colormap: 从淡黄色过渡到深褐色/黑色
-                    
+
                     # 绘制散点图，使用圆形标记和颜色映射
                     scatter = ax2.scatter(accuracy_values, fairness_values, 
                                         c=action_numbers, 
@@ -560,23 +576,23 @@ class Experiment:
                                         norm=norm,
                                         marker='o',  # 使用圆形标记
                                         alpha=0.6)
-                    
+
                     # 添加颜色条
                     cbar = plt.colorbar(scatter, ax=ax2)
                     cbar.set_label('Action Number')
-                    
+
                     ax2.set_title(f'Proportion: {proportion}, Num New Data: {num_new_data}', fontsize=10)
                     ax2.set_xlabel('Accuracy')
                     ax2.set_ylabel('Fairness Value')
                     ax2.grid(True, linestyle='--', alpha=0.7)
-                
+
                 # 更新子图索引
                 plot_index += 1
-        
+
         # 自动调整两个图的子图布局
         fig1.tight_layout(rect=[0, 0, 1, 0.95])  # rect 调整避免标题重叠
         fig2.tight_layout(rect=[0, 0, 1, 0.95])
-        
+
         # 显示图表
         plt.show()
         
@@ -713,7 +729,7 @@ class Experiment:
         print(f"Total number of non-zero values across all varphis: {non_zero_count}")
 
         # self.limited_values_range = 0
-        self.limited_values_range = np.arange(1, non_zero_count, 50)
+        self.limited_values_range = np.arange(1, non_zero_count, self.gap)
         before_values = []
         after_values = []
         fairness_accuracy_pairs = []

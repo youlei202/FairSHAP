@@ -41,7 +41,7 @@ class Baseline:
         for sa_list, pv in zip(unpriv_dict, priv_val):
             sa_list.remove(pv)
         dr_baseline1 = fairness_value_function(sen_att, priv_val, unpriv_dict, self.X_test.values, model)
-        logger.info(f'baseline1: 使用了{self.model}, Accuracy: {accuracy:.3f}, DR: {dr_baseline1:.4f}')
+        logger.info(f'baseline1: 使用了{self.model}, Accuracy: {accuracy:.3f}, DR: {dr_baseline1:.5f}')
 
     def get_baseline2(self):
         if self.model == 'xgboost':
@@ -67,7 +67,7 @@ class Baseline:
                 for sa_list, pv in zip(unpriv_dict, priv_val):
                     sa_list.remove(pv)
                 dr_baseline2 = fairness_value_function(sen_att, priv_val, unpriv_dict, self.X_test.values, model)
-                logger.info(f'baseline2: 使用了{self.model}, proportion: {proporation}, num_new_data: {num_new_data}, Accuracy: {accuracy:.3f}, DR: {dr_baseline2:.4f}')
+                logger.info(f'baseline2: 使用了{self.model}, proportion: {proporation}, num_new_data: {num_new_data}, Accuracy: {accuracy:.3f}, DR: {dr_baseline2:.5f}')
     
 
     def get_baseline3(self):
@@ -102,7 +102,7 @@ class Baseline:
                 for sa_list, pv in zip(unpriv_dict, priv_val):
                     sa_list.remove(pv)
                 dr_baseline3 = fairness_value_function(sen_att, priv_val, unpriv_dict, self.X_test.values, model)
-                logger.info(f'baseline3: 使用了{self.model}, proportion: {proporation}, num_new_data: {num_new_data}, Accuracy: {accuracy:.3f}, DR: {dr_baseline3:.4f}')
+                logger.info(f'baseline3: 使用了{self.model}, proportion: {proporation}, num_new_data: {num_new_data}, Accuracy: {accuracy:.3f}, DR: {dr_baseline3:.5f}')
 
 
 def random_pick_groups(X_unlabel, replacement, proportion, num_new_data):
