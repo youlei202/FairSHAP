@@ -59,16 +59,19 @@ class Experiment:
         if self.dataset_name == 'german_credit':
             self.target_name = 'Risk'
             self.original_DR =  0.010580012574791908
+            self.control_max_actions = False
             self.gap = 1
 
         elif self.dataset_name == 'uci':
             self.target_name = 'income'
             self.original_DR = 0.05939711630344391
+            self.control_max_actions = False
             self.gap =50
         elif self.dataset_name == 'census_income_kdd':
             self.target_name = 'class'
-            self.original_DR = 0.08210
-            self.gap = 100
+            self.original_DR = 0.05243
+            self.control_max_actions = True
+            self.gap = 10
         else:
             raise ValueError('dataset_name should be german_credit or uci')
     def get_result(
@@ -227,10 +230,12 @@ class Experiment:
             y_unlabel_sex1 = self.y_unlabel[self.X_unlabel["sex"] == 1]
 
             '''  1. 从X_unlabel中按照比例随机抽出num_new_data组数据  '''
+            print(f'开始第1步, 从X_unlabel中按照比例随机抽出num_new_data组数据')
             random_picks_sex0 = self.random_pick_groups(X_unlabel_sex0)    # dataframe type
             random_picks_sex1 = self.random_pick_groups(X_unlabel_sex1)    # dataframe type
 
-            '''  2. X_label分别与random_picks[0,1,2....,num_new_data-1]进行matching, 找到matching的数据  ''' 
+            '''  2. X_label分别与random_picks[0,1,2....,num_new_data-1]进行matching, 找到matching的数据  '''
+            print(f'开始第2步, X_label分别与random_picks[0,1,2....,num_new_data-1]进行matching, 找到matching的数据') 
             matchings_sex0 = self.get_matching(random_picks_sex0, X_train_sex0)   # matchings_sex0[0], matchings_sex0[1], matchings_sex0[2]...
             matchings_sex1 = self.get_matching(random_picks_sex1, X_train_sex1)   # matchings[0], matchings[1], matchings[2]...
 
@@ -296,6 +301,8 @@ class Experiment:
             print(f"Total number of non-zero values across all varphis: {non_zero_count}")
 
             # self.limited_values_range = 0
+            if self.control_max_actions == True:
+                non_zero_count = non_zero_count // 3
             self.limited_values_range = np.arange(1, non_zero_count, self.gap)
             before_values = []
             after_values = []
@@ -428,6 +435,8 @@ class Experiment:
             print(f"Total number of non-zero values across all varphis: {non_zero_count}")
 
             # self.limited_values_range = 0
+            if self.control_max_actions == True:
+                non_zero_count = non_zero_count //3
             self.limited_values_range = np.arange(1, non_zero_count, self.gap)
             after_values = []
             fairness_accuracy_pairs = []
@@ -729,6 +738,8 @@ class Experiment:
         print(f"Total number of non-zero values across all varphis: {non_zero_count}")
 
         # self.limited_values_range = 0
+        if self.control_max_actions == True:
+            non_zero_count = non_zero_count // 3
         self.limited_values_range = np.arange(1, non_zero_count, self.gap)
         before_values = []
         after_values = []
