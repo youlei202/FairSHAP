@@ -34,6 +34,9 @@ def load_dataset(dataset_name):
     elif dataset_name == 'census_income_kdd':
         # load census income kdd dataset
         original_data, processed_data = census_income_kdd()
+    elif dataset_name == 'default_credit':
+        # load default credit dataset
+        original_data, processed_data = default_credit()
     else:
         raise ValueError(
         f"Unknown dataset: {dataset_name}. If you want to use the German Credit Dataset, please input 'german_credit'. If you want to use the UCI Dataset, please input 'uci'. If you want to use the bank_marketing Dataset, please input 'bank_marketing'."
@@ -208,6 +211,38 @@ def census_income_kdd():
 
     data = data.dropna()
     return original_data, data
+
+def default_credit():
+    file_path = 'dataset/default_of_credit_card_clients/default of credit card clients.xls'
+    original_data = pd.read_excel(file_path, skiprows=1)
+    
+    '''Process the data
+    1. Drop the ID column
+    2. rename the column 'SEX' to 'sex'(lowercase)
+    3. change the mapping relationship from (male:1, female:2) to (female:0, male:1)
+    4. One-hot encoding for the categorical features
+    5. Standardization for the numerical features
+    '''
+    processed_data = original_data.copy()
+    # 1. Drop the ID column
+    processed_data.drop('ID', axis=1, inplace=True)
+    # 2. rename the column
+    processed_data = processed_data.rename(columns={'SEX': 'sex'})
+    processed_data = processed_data.rename(columns={'default payment next month': 'default_payment_next_month'})
+    # 3. change the mapping relationship
+    processed_data.loc[processed_data['sex'] == 2, 'sex'] = 0
+    # 4. One-hot encoding for the categorical features
+    categorical_features = ['EDUCATION', 'MARRIAGE', 'PAY_0', 'PAY_2', 'PAY_3', 'PAY_4', 'PAY_5', 'PAY_6']
+    processed_data = pd.get_dummies(processed_data, columns=categorical_features)
+    processed_data = processed_data.astype(int)
+    # 5. Standardization for the numerical features
+    numerical_features = ['LIMIT_BAL', 'AGE', 'BILL_AMT1', 'BILL_AMT2', 'BILL_AMT3', 'BILL_AMT4', 'BILL_AMT5', 'BILL_AMT6', 'PAY_AMT1', 'PAY_AMT2', 'PAY_AMT3', 'PAY_AMT4', 'PAY_AMT5', 'PAY_AMT6']
+    scaler = StandardScaler()
+    processed_data[numerical_features] = scaler.fit_transform(processed_data[numerical_features])
+    # 6. Move the target column to the last column
+    target_column = processed_data.pop('default_payment_next_month')
+    processed_data['default_payment_next_month'] = target_column
+    return original_data, processed_data
 
 if __name__ == '__main__':
     a, b =german_credit()

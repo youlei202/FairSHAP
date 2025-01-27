@@ -72,6 +72,11 @@ class Experiment:
             self.original_DR = 0.05243
             self.control_max_actions = True
             self.gap = 10
+        elif self.dataset_name == 'default_credit_card':
+            self.target_name = 'default_payment_next_month'
+            self.original_DR = 0.02408
+            self.control_max_actions = False
+            self.gap = 50
         else:
             raise ValueError('dataset_name should be german_credit or uci')
     def get_result(
@@ -366,10 +371,12 @@ class Experiment:
             y_unlabel_sex1 = self.y_unlabel[self.X_unlabel["sex"] == 1]
 
             '''  1. 从X_unlabel中按照比例随机抽出num_new_data组数据  '''
+            print(f'开始第1步, 从X_unlabel中按照比例随机抽出num_new_data组数据')
             random_picks_sex0 = self.random_pick_groups(X_unlabel_sex0)    # dataframe type
             random_picks_sex1 = self.random_pick_groups(X_unlabel_sex1)    # dataframe type
 
             '''  2. X_label分别与random_picks[0,1,2....,num_new_data-1]进行matching, 找到matching的数据  ''' 
+            print(f'开始第2步, X_label分别与random_picks[0,1,2....,num_new_data-1]进行matching, 找到matching的数据')
             matchings_sex0 = self.get_matching(random_picks_sex1, X_train_sex0)   # original sex0 与 x_unlabel sex1匹配
             matchings_sex1 = self.get_matching(random_picks_sex0, X_train_sex1)   # original sex1 与 x_unlabel sex0匹配
 
@@ -669,7 +676,6 @@ class Experiment:
 
     def get_fairness_shapley_values(self, X_train, random_picks, matchings, fairness_explainer):
         fairness_shapley_values = []
-        breakpoint()
         for i in range(self.num_new_data):
             fairness_shapley_value = fairness_explainer.shap_values(
                                         X = X_train.values,
