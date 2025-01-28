@@ -14,7 +14,7 @@ from loguru import logger
 
 
 class Baseline:
-    def __init__(self, X_train, y_train, X_test, y_test, X_unlabel, model:string):
+    def __init__(self, X_train, y_train, X_test, y_test, X_unlabel, model:string, sen_attri="sex"):
         self.X_train = X_train
         self.y_train = y_train
         self.X_test = X_test
@@ -22,7 +22,7 @@ class Baseline:
         self.X_unlabel = X_unlabel
         # self.y_unlabel = y_unlabel
         self.model = model  
-
+        self.sen_attri = sen_attri # "sex" / "race"
 
 
     def get_baseline1(self):
@@ -33,8 +33,7 @@ class Baseline:
         model.fit(self.X_train, self.y_train)
         y_pred = model.predict(self.X_test)
         accuracy = accuracy_score(self.y_test, y_pred)
-
-        sen_att_name = ["sex"]
+        sen_att_name = [self.sen_attri]
         sen_att = [self.X_train.columns.get_loc(name) for name in sen_att_name]
         priv_val = [1]
         unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]
@@ -60,7 +59,7 @@ class Baseline:
                 y_pred = model.predict(self.X_test)
                 
                 accuracy = accuracy_score(self.y_test, y_pred)
-                sen_att_name = ["sex"]
+                sen_att_name = [self.sen_attri]
                 sen_att = [self.X_train.columns.get_loc(name) for name in sen_att_name]
                 priv_val = [1]
                 unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]
@@ -95,7 +94,7 @@ class Baseline:
                 y_pred = model.predict(self.X_test)
 
                 accuracy = accuracy_score(self.y_test, y_pred)
-                sen_att_name = ["sex"]
+                sen_att_name = [self.sen_attri]
                 sen_att = [self.X_train.columns.get_loc(name) for name in sen_att_name]
                 priv_val = [1]
                 unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]

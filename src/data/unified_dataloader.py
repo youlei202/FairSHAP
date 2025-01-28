@@ -25,18 +25,23 @@ def load_dataset(dataset_name):
     processed_data (pd.DataFrame): 预处理后的数据集
     """
     if dataset_name == 'german_credit':
-        # load German Credit dataset
         original_data, processed_data = german_credit()
-        
+
     elif dataset_name == 'uci':
-        # load UCI dataset
         original_data, processed_data = uci()
+
     elif dataset_name == 'census_income_kdd':
-        # load census income kdd dataset
         original_data, processed_data = census_income_kdd()
+
     elif dataset_name == 'default_credit':
-        # load default credit dataset
         original_data, processed_data = default_credit()
+
+    elif dataset_name == 'compas':
+        original_data, processed_data = compas()
+
+    elif dataset_name == 'compas4race':
+        original_data, processed_data = compas4race()
+    
     else:
         raise ValueError(
         f"Unknown dataset: {dataset_name}. If you want to use the German Credit Dataset, please input 'german_credit'. If you want to use the UCI Dataset, please input 'uci'. If you want to use the bank_marketing Dataset, please input 'bank_marketing'."
@@ -244,6 +249,70 @@ def default_credit():
     processed_data['default_payment_next_month'] = target_column
     return original_data, processed_data
 
+def compas():
+    '''Load the COMPAS dataset and preprocess it.
+    
+    1. Load the COMPAS dataset
+    2. choose existing_columns and drop the rest
+    3. set the mapping relationship female:0, male:1
+    4. One-hot encoding for the categorical features
+    5. Standardization for the numerical features
+    '''
+    # 1. Load the COMPAS dataset
+    file_path = 'dataset/compas/compas-scores-two-years.csv'
+    original_data = pd.read_csv(file_path,sep=",",header=0)
+    # 2. choose existing_columns and drop the rest
+    processed_data = original_data.copy()
+    existing_columns = ['sex','age', 'race', 'juv_fel_count','juv_misd_count','juv_other_count','priors_count','c_charge_degree','score_text','type_of_assessment','two_year_recid']
+    processed_data = processed_data[existing_columns]
+    # 3. set the mapping relationship
+    processed_data['sex'] = processed_data['sex'].map({'Male':1,'Female':0})
+    # 4. One-hot encoding for the categorical features
+    categorical_features = ['race', 'c_charge_degree', 'type_of_assessment','score_text']
+    processed_data = pd.get_dummies(processed_data, columns=categorical_features)
+    processed_data = processed_data.astype(int)
+    # 5. Standardization for the numerical features
+    numerical_features = ['age', 'juv_fel_count','juv_misd_count', 'juv_other_count', 'priors_count']
+    scaler = StandardScaler()
+    processed_data[numerical_features] = scaler.fit_transform(processed_data[numerical_features])
+    # 6. Move the target column to the last column
+    target_column = processed_data.pop('two_year_recid')
+    processed_data['two_year_recid'] = target_column
+    return original_data, processed_data
+
+def compas4race():
+    '''Load the COMPAS dataset and preprocess it (sensitive feature = race,  only reserve race_African-American and race_Caucasian).
+    
+    1. Load the COMPAS dataset
+    2. choose existing_columns and drop the rest, and only reserve rows with 'African-American' and 'Caucasian'
+    3. set the mapping relationship {'Female':0, 'Male':1} and {'Caucasian':0, 'African-American':1}
+    4. One-hot encoding for the categorical features
+    5. Standardization for the numerical features
+    '''
+    # 1. Load the COMPAS dataset
+    file_path = 'dataset/compas/compas-scores-two-years.csv'
+    original_data = pd.read_csv(file_path,sep=",",header=0)
+    # 2. choose existing_columns and drop the rest
+    processed_data = original_data.copy()
+    existing_columns = ['sex','age', 'race', 'juv_fel_count','juv_misd_count','juv_other_count','priors_count','c_charge_degree','score_text','type_of_assessment','two_year_recid']
+    processed_data = processed_data[existing_columns]
+    processed_data = processed_data[processed_data['race'].isin(['African-American', 'Caucasian'])]
+    processed_data = processed_data.reset_index(drop=True)
+    # 3. set the mapping relationship
+    processed_data['sex'] = processed_data['sex'].map({'Male':1,'Female':0})
+    processed_data['race'] = processed_data['race'].map({'Caucasian':0, 'African-American':1})
+    # 4. One-hot encoding for the categorical features
+    categorical_features = ['c_charge_degree', 'type_of_assessment','score_text']
+    processed_data = pd.get_dummies(processed_data, columns=categorical_features)
+    processed_data = processed_data.astype(int)
+    # 5. Standardization for the numerical features
+    numerical_features = ['age', 'juv_fel_count','juv_misd_count', 'juv_other_count', 'priors_count']
+    scaler = StandardScaler()
+    processed_data[numerical_features] = scaler.fit_transform(processed_data[numerical_features])
+    # 6. Move the target column to the last column
+    target_column = processed_data.pop('two_year_recid')
+    processed_data['two_year_recid'] = target_column
+    return original_data, processed_data
 if __name__ == '__main__':
     a, b =german_credit()
     print(a)

@@ -60,23 +60,34 @@ class Experiment:
             self.target_name = 'Risk'
             self.original_DR =  0.010580012574791908
             self.control_max_actions = False
+            self.sen_attri = "sex"
             self.gap = 1
 
         elif self.dataset_name == 'uci':
             self.target_name = 'income'
             self.original_DR = 0.05939711630344391
             self.control_max_actions = False
+            self.sen_attri = "sex"
             self.gap =50
         elif self.dataset_name == 'census_income_kdd':
             self.target_name = 'class'
             self.original_DR = 0.05243
             self.control_max_actions = True
+            self.sen_attri = "sex"
             self.gap = 10
         elif self.dataset_name == 'default_credit_card':
             self.target_name = 'default_payment_next_month'
             self.original_DR = 0.02408
             self.control_max_actions = False
+            self.sen_attri = "sex"
             self.gap = 50
+        elif self.dataset_name == 'compas4race':
+            self.target_name = 'two_year_recid'
+            self.original_DR = 0.18055
+            self.control_max_actions = False
+            self.sen_attri = "race"
+            self.gap = 5
+
         else:
             raise ValueError('dataset_name should be german_credit or uci')
     def get_result(
@@ -105,7 +116,7 @@ class Experiment:
 
 
         # Set the sensitive variables, and initilize the fairness_explainer - 这里已经默认是sex, 其中男性是privilege group 
-        sen_att_name = ["sex"]
+        sen_att_name = [self.sen_attri]
         sen_att = [self.X_train.columns.get_loc(name) for name in sen_att_name]
         priv_val = [1]
         unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]
@@ -189,7 +200,7 @@ class Experiment:
             matchings = self.get_matching(random_picks, self.X_train)   # matchings[0], matchings[1], matchings[2]...
 
             # Set the sensitive variables, and initilize the fairness_explainer - 这里已经默认是sex, 其中男性是privilege group 
-            sen_att_name = ["sex"]
+            sen_att_name = [self.sen_attri]
             sen_att = [self.X_train.columns.get_loc(name) for name in sen_att_name]
             priv_val = [1]
             unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]
@@ -245,7 +256,7 @@ class Experiment:
             matchings_sex1 = self.get_matching(random_picks_sex1, X_train_sex1)   # matchings[0], matchings[1], matchings[2]...
 
             # Set the sensitive variables, and initilize the fairness_explainer - 这里已经默认是sex, 其中男性是privilege group 
-            sen_att_name = ["sex"]
+            sen_att_name = [self.sen_attri]
             sen_att = [self.X_train.columns.get_loc(name) for name in sen_att_name]
             priv_val = [1]
             unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]
@@ -339,7 +350,7 @@ class Experiment:
                 model_new.fit(x, y)
                 
                 # 计算fairness values
-                sen_att_name = ["sex"]
+                sen_att_name = [self.sen_attri]
                 sen_att = [self.X_train.columns.get_loc(name) for name in sen_att_name]
                 priv_val = [1]
                 unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]
@@ -381,7 +392,7 @@ class Experiment:
             matchings_sex1 = self.get_matching(random_picks_sex0, X_train_sex1)   # original sex1 与 x_unlabel sex0匹配
 
             # Set the sensitive variables, and initilize the fairness_explainer - 这里已经默认是sex, 其中男性是privilege group 
-            sen_att_name = ["sex"]
+            sen_att_name = [self.sen_attri]
             sen_att = [self.X_train.columns.get_loc(name) for name in sen_att_name]
             priv_val = [1]
             unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]
@@ -474,7 +485,7 @@ class Experiment:
                 model_new.fit(x, y)
                 
                 # 计算fairness values
-                sen_att_name = ["sex"]
+                sen_att_name = [self.sen_attri]
                 sen_att = [self.X_train.columns.get_loc(name) for name in sen_att_name]
                 priv_val = [1]
                 unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]
@@ -777,7 +788,7 @@ class Experiment:
             model_new.fit(x, y)
             
             # 计算fairness values
-            sen_att_name = ["sex"]
+            sen_att_name = [self.sen_attri]
             sen_att = [self.X_train.columns.get_loc(name) for name in sen_att_name]
             priv_val = [1]
             unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]
@@ -851,7 +862,7 @@ class Experiment:
         #     model_new.fit(x, y)
             
         #     # 计算fairness values
-        #     sen_att_name = ["sex"]
+        #     sen_att_name = [self.sen_attri]
         #     sen_att = [self.X_train.columns.get_loc(name) for name in sen_att_name]
         #     priv_val = [1]
         #     unpriv_dict = [list(set(self.X_train.values[:, sa])) for sa in sen_att]
