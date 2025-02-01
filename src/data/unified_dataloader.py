@@ -27,8 +27,8 @@ def load_dataset(dataset_name):
     if dataset_name == 'german_credit':
         original_data, processed_data = german_credit()
 
-    elif dataset_name == 'uci':
-        original_data, processed_data = uci()
+    elif dataset_name == 'adult':
+        original_data, processed_data = adult()
 
     elif dataset_name == 'census_income_kdd':
         original_data, processed_data = census_income_kdd()
@@ -96,7 +96,7 @@ def german_credit():
     return original_data, data
 
 
-def uci():
+def adult():
     
     '''Load the UCI dataset and preprocess it.'''
 

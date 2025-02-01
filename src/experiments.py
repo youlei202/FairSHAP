@@ -63,7 +63,7 @@ class Experiment:
             self.sen_attri = "sex"
             self.gap = 1
 
-        elif self.dataset_name == 'uci':
+        elif self.dataset_name == 'adult':
             self.target_name = 'income'
             self.original_DR = 0.05939711630344391
             self.control_max_actions = False
