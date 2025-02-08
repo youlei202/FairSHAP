@@ -114,8 +114,8 @@ class FairnessExplainer:
 
     def shap_values(
         self,
-        X,
-        X_baseline,
+        X: np.ndarray,
+        X_baseline: np.ndarray,
         matching,
         sample_size=1000,
         shap_sample_size="auto",

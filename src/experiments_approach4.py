@@ -15,10 +15,11 @@ from src.attribution.oracle_metric import perturb_numpy_ver
 
 EPSILON = 1e-20
 
-class ExperimentNew:
+class ExperimentNew2:
     """ 
     The core part of how experiments work.
-    
+    X_train_majority_label1 match with X_train_minority_label0
+    X_train_majority_label1 match with X_train_minority_label0
     ```
     Args:
         X_train_majority: pd.DataFrame,
@@ -98,21 +99,23 @@ class ExperimentNew:
         Run the experiment.
 
         ```
-        
-        2. 将X_train_minority与X_train_replace_majority进行匹配
-        3. 使用fairshap,把X_train_minority作为baseline dataset，找到X_train_replace_majority中需要替换的数据，假设总共需要替换n个数据点
-        4. (1,n,20)根据这些,分别计算替换(1,n)中不同个数的结果,把需要替换的数据替换到X_train_replace_majority中,得到X_train_replace_majority_new
-        5. 把X_train_replace_majority_new和X_train_rest_majority,还有X_train_minority合并,得到新的X_train_new，然后重新训练，得到新的模型model_new，计算新的DR值
-
+        1. 把X_train_majority和X_train_minority分别分成X_train_majority_label1, X_train_majority_label0, X_train_minority_label1, X_train_minority_label0
+        2. 初始化FairnessExplainer
         """
-        # 1. 从majority parity(此处男性)中随机选择30%, 50%, 70%的比例，作为将被替换的数据集X_train_replace_majority,剩余部分为X_train_rest_majority
-        # proportion = 1
-        # X_train_replace_majority = self.X_train_majority.sample(frac=proportion, random_state=20)
-        # X_train_rest_majority = self.X_train_majority.drop(X_train_replace_majority.index)
-        # y_train_replace_majority = self.y_train_majority.loc[X_train_replace_majority.index]
-        # y_train_rest_majority = self.y_train_majority.drop(X_train_replace_majority.index)
-        
-        # 2. 初始化fairness_explainer
+
+        # 1. 把X_train_majority和X_train_minority分别分成X_train_majority_label1, X_train_majority_label0, X_train_minority_label1, X_train_minority_label0
+        y_train_majority_label1 = self.y_train_majority[self.y_train_majority == 1]
+        y_train_majority_label0 = self.y_train_majority[self.y_train_majority == 0]
+        y_train_minority_label1 = self.y_train_minority[self.y_train_minority == 1]
+        y_train_minority_label0 = self.y_train_minority[self.y_train_minority == 0]
+
+        X_train_majority_label0 = self.X_train_majority.loc[y_train_majority_label0.index]
+        X_train_majority_label1 = self.X_train_majority.loc[y_train_majority_label1.index]
+        X_train_minority_label0 = self.X_train_minority.loc[y_train_minority_label0.index]
+        X_train_minority_label1 = self.X_train_minority.loc[y_train_minority_label1.index]
+
+
+        print('2. 初始化FairnessExplainer')
         sen_att_name = self.sen_att_name
         sen_att = [self.X_test.columns.get_loc(name) for name in sen_att_name]
         priv_val = [1]
@@ -129,42 +132,82 @@ class ExperimentNew:
         logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 
         if self.change_group == 'minority':
-            print('3. 将X_train_minority与X_train_majority进行匹配')
-            matching = NearestNeighborDataMatcher(X_labeled=self.X_train_minority, X_unlabeled=self.X_train_majority).match(n_neighbors=1)
-            print('4. 使用fairshap, 从X_train_majority中找到合适的值替换X_train_minority中的数据')
-            fairness_shapley_value = fairness_explainer_original.shap_values(
-                                        X = self.X_train_minority.values,
-                                        X_baseline = self.X_train_majority.values,
-                                        matching=matching,
+            print('3(a). 将X_train_minority_label0与X_train_majority_label0进行匹配')
+            matching_label0 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label0, X_unlabeled=X_train_majority_label0).match(n_neighbors=1)
+            print('3(b). 将X_train_minority_label1与X_train_majority_label1进行匹配')
+            matching_label1 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label1, X_unlabeled=X_train_majority_label1).match(n_neighbors=1)
+
+            print('4(a). 使用fairshap, 从 X_train_majority_label0中找到合适的值替换X_train_minority_label0中的数据')
+            fairness_shapley_value_label0 = fairness_explainer_original.shap_values(
+                                        X = X_train_minority_label0.values,
+                                        X_baseline = X_train_majority_label0.values,
+                                        matching=matching_label0,
                                         sample_size=1000,
                                         shap_sample_size="auto",
                                     )
-            X_change = self.X_train_minority.copy()
-            X_base = self.X_train_majority
-
-        elif self.change_group == 'majority':
-            print('3. 将X_train_majority与X_train_minority进行匹配')
-            matching = NearestNeighborDataMatcher(X_labeled=self.X_train_majority, X_unlabeled=self.X_train_minority).match(n_neighbors=1)
-            print('4. 使用fairshap, 从X_train_minority中找到合适的值替换X_train_majority中的数据')
-            fairness_shapley_value = fairness_explainer_original.shap_values(
-                                        X = self.X_train_majority.values,
-                                        X_baseline = self.X_train_minority.values,
-                                        matching=matching,
+            X_change_label0 = X_train_minority_label0.copy()
+            X_base_label0 = X_train_majority_label0
+            print('4(b). 使用fairshap, 从 X_train_majority_label1中找到合适的值替换X_train_minority_label1中的数据')
+            fairness_shapley_value_label1 = fairness_explainer_original.shap_values(
+                                        X = X_train_minority_label1.values,
+                                        X_baseline = X_train_majority_label1.values,
+                                        matching=matching_label1,
                                         sample_size=1000,
                                         shap_sample_size="auto",
-                                    )  
-            X_change = self.X_train_majority.copy()
-            X_base = self.X_train_minority
+                                    )
+            
+            X_change_label1 = X_train_minority_label1.copy()
+            X_base_label1 = X_train_majority_label1
 
+        elif self.change_group == 'majority':
+            print('3(a). 将X_train_majority_label0与X_train_minority_label0进行匹配')
+            matching_label0 = NearestNeighborDataMatcher(X_labeled=X_train_majority_label0, X_unlabeled=X_train_minority_label0).match(n_neighbors=1)
+            print('3(b). 将X_train_majority_label1与X_train_minority_label1进行匹配')
+            matching_label1 = NearestNeighborDataMatcher(X_labeled=X_train_majority_label1, X_unlabeled=X_train_minority_label1).match(n_neighbors=1)
+
+            print('4(a). 使用fairshap, 从 X_train_minority_label0中找到合适的值替换X_train_majority_label0中的数据')
+            fairness_shapley_value_label0 = fairness_explainer_original.shap_values(
+                                        X = X_train_majority_label0.values,
+                                        X_baseline = X_train_minority_label0.values,
+                                        matching=matching_label0,
+                                        sample_size=1000,
+                                        shap_sample_size="auto",
+                                    )
+            X_change_label0 = X_train_majority_label0.copy()
+            X_base_label0 = X_train_minority_label0
+            print('4(b). 使用fairshap, 从 X_train_minority_label1中找到合适的值替换X_train_majority_label1中的数据')
+            fairness_shapley_value_label1 = fairness_explainer_original.shap_values(
+                                        X = X_train_majority_label1.values,
+                                        X_baseline = X_train_minority_label1.values,
+                                        matching=matching_label1,
+                                        sample_size=1000,
+                                        shap_sample_size="auto",
+                                    )
+            
+            X_change_label1 = X_train_majority_label1.copy()
+            X_base_label1 = X_train_minority_label1
+            
         print('5. 计算出varphi和q')
         # 筛选出shapley value大于0.1的值，其他值设为0，然后归一化
-        varphi = fix_negative_probabilities_select_larger(fairness_shapley_value)
-        non_zero_count =np.count_nonzero(varphi)
-        viz_varphi(varphi=fairness_shapley_value)
-        q = DataComposer(
-                        x_counterfactual=X_base.values, 
-                        joint_prob=matching, 
-                        method="max").calculate_q()   
+        varphi_label0 = fix_negative_probabilities_select_larger(fairness_shapley_value_label0)
+        varphi_label1 = fix_negative_probabilities_select_larger(fairness_shapley_value_label1)
+        varphi = np.vstack((varphi_label0, varphi_label1))
+        non_zero_count =np.count_nonzero(varphi_label0) + np.count_nonzero(varphi_label1)
+        viz_varphi(varphi=fairness_shapley_value_label0)
+        viz_varphi(varphi=fairness_shapley_value_label1)
+
+        q_label0 = DataComposer(
+                        x_counterfactual=X_base_label0.values, 
+                        joint_prob=matching_label0, 
+                        method="max").calculate_q() 
+        q_label1 = DataComposer(
+                        x_counterfactual=X_base_label1.values, 
+                        joint_prob=matching_label1, 
+                        method="max").calculate_q()
+        q = np.vstack((q_label0, q_label1))
+
+        X_change = pd.concat([X_change_label0, X_change_label1], axis=0)
+        X_base = pd.concat([X_base_label0, X_base_label1], axis=0)
         print(f'6. 开始整理并且合并新数据,共修改{non_zero_count}个数据点, 使用new training set训练新模型')
         values_range = np.arange(1, non_zero_count, self.gap)
         after_values_on_test_set = []

@@ -25,7 +25,7 @@ class NearestNeighborDataMatcher(DataMatcher):
         nn.fit(self.X_unlabeled)
 
         # Find the nearest neighbors in the unlabeled data for each row in the labeled data
-        distances, indices = nn.kneighbors(self.X_labeled)
+        distances, indices = nn.kneighbors(self.X_labeled)                         # indices is 2D matrix: (self.X_labeled.shape[0], self.X_unlabeled.shape[0])
 
         # Initialize the probability matrix
         prob_matrix = np.zeros((self.X_labeled.shape[0], self.X_unlabeled.shape[0]))
