@@ -89,8 +89,9 @@ class ExperimentNew2:
             self.gap = 1
         elif self.dataset_name == 'default_credit':
             self.sen_att_name = ['sex']
+            self.original_Xtrain_DR = 0.01571783237159252
             self.original_Xtest_DR = 0.01625891402363777
-            self.original_Xtest_acc = None
+            self.original_Xtest_acc = 0.8133333333333334
             self.gap = 1
         else :
             raise ValueError('The dataset name is not supported')
