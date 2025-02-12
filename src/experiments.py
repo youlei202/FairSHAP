@@ -15,7 +15,7 @@ from src.attribution.oracle_metric import perturb_numpy_ver
 
 EPSILON = 1e-20
 
-class ExperimentNew4:
+class Experiment:
     """ 
     The core part of how experiments work.
     X_train_majority_label1 match with X_train_minority_label1
