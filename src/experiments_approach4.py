@@ -43,6 +43,9 @@ class ExperimentNew4:
             X_test: pd.DataFrame,
             y_test: pd.Series,
             dataset_name: str,
+            original_Xtest_DR,
+            original_Xtest_acc,
+
             ):
         self.model = model
         self.X_train_majority = X_train_majority
@@ -53,44 +56,25 @@ class ExperimentNew4:
         self.y_test = y_test
         self.dataset_name = dataset_name
 
+        self.original_Xtest_DR = original_Xtest_DR
+        self.original_Xtest_acc = original_Xtest_acc
         if self.dataset_name == 'german_credit':
             self.sen_att_name = ['sex']
-            self.original_Xtrain_DR = 0.044362135231494904
-            self.original_Xtest_DR = 0.05330166965723038
-            self.original_Xtest_acc = 0.6766666666666666
-            
             self.gap = 1
         elif self.dataset_name == 'adult':
             self.sen_att_name = ['sex']
-            self.original_Xtrain_DR = 0.038255129009485245
-            self.original_Xtest_DR = 0.03856540843844414
-            self.original_Xtest_acc = 0.8749104309550619
             self.gap = 1
         elif self.dataset_name == 'compas':
             self.sen_att_name = ['sex']
-            self.original_Xtrain_DR = 0.0918121188879013
-            self.original_Xtest_DR = 0.09081892669200897
-            self.original_Xtest_acc = 0.6609699769053118
             self.gap = 1
         elif self.dataset_name == 'compas4race':
             self.sen_att_name = ['race']
-            self.original_Xtrain_DR =0.09234681725502014
-            self.original_Xtest_DR = 0.09175542742013931
-            self.original_Xtest_acc = 0.6742547425474255
-
             self.gap = 1
         elif self.dataset_name == 'census_income':
             self.sen_att_name = ['sex']
-            self.original_Xtrain_DR = 0.07776225358247757
-            self.original_Xtest_DR = 0.07678327709436417
-            self.original_Xtest_acc = 0.9347522137641758
-
             self.gap = 1
         elif self.dataset_name == 'default_credit':
             self.sen_att_name = ['sex']
-            self.original_Xtrain_DR = 0.01571783237159252
-            self.original_Xtest_DR = 0.01625891402363777
-            self.original_Xtest_acc = 0.8133333333333334
             self.gap = 1
         else :
             raise ValueError('The dataset name is not supported')
