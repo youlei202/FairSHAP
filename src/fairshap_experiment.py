@@ -12,12 +12,12 @@ from src.matching.nn_matcher import NearestNeighborDataMatcher
 from src.attribution import FairnessExplainer
 from src.composition.data_composer import DataComposer
 from src.attribution.oracle_metric import perturb_numpy_ver
-
+from fairness_measures import marginalised_np_mat, grp1_DP, grp2_EO, grp3_PQP
 EPSILON = 1e-20
 
-class Experiment:
+class ExperimentDR:
     """ 
-    The core part of how experiments work.
+    The core part of how fairshap(based on discriminative_risk) works.
     X_train_majority_label1 match with X_train_minority_label1
     X_train_majority_label0 match with X_train_minority_label0
     ```
@@ -43,8 +43,12 @@ class Experiment:
             X_test: pd.DataFrame,
             y_test: pd.Series,
             dataset_name: str,
+            fairshap_base: str, # 'DR', 'DP', 'EO', 'PQP'
             original_Xtest_DR,
             original_Xtest_acc,
+            original_Xtest_DP,
+            original_Xtest_EO,
+            original_Xtest_PQP,
 
             ):
         self.model = model
@@ -55,9 +59,13 @@ class Experiment:
         self.X_test = X_test
         self.y_test = y_test
         self.dataset_name = dataset_name
-
+        self.fairshap_base = fairshap_base
         self.original_Xtest_DR = original_Xtest_DR
         self.original_Xtest_acc = original_Xtest_acc
+        self.original_Xtest_DP = original_Xtest_DP
+        self.original_Xtest_EO = original_Xtest_EO
+        self.original_Xtest_PQP = original_Xtest_PQP
+
         if self.dataset_name == 'german_credit':
             self.sen_att_name = ['sex']
             self.gap = 1
@@ -107,12 +115,12 @@ class Experiment:
         unpriv_dict = [list(set(self.X_test.values[:, sa])) for sa in sen_att]
         for sa_list, pv in zip(unpriv_dict, priv_val):
             sa_list.remove(pv)
-
         fairness_explainer_original = FairnessExplainer(
                 model=self.model, 
                 sen_att=sen_att, 
                 priv_val=priv_val, 
-                unpriv_dict=unpriv_dict
+                unpriv_dict=unpriv_dict,
+                fairshap_base=self.fairshap_base
                 )
         logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -124,9 +132,10 @@ class Experiment:
         print('4(a). 使用fairshap, 从 X_train_majority_label0中找到合适的值替换X_train_minority_label0中的数据')
         fairness_shapley_minority_value_label0 = fairness_explainer_original.shap_values(
                                     X = X_train_minority_label0.values,
+                                    Y = y_train_minority_label0.values,
                                     X_baseline = X_train_majority_label0.values,
                                     matching=matching_minority_label0,
-                                    sample_size=1000,
+                                    sample_size=500,
                                     shap_sample_size="auto",
                                 )
         X_change_minority_label0 = X_train_minority_label0.copy()
@@ -134,9 +143,10 @@ class Experiment:
         print('4(b). 使用fairshap, 从 X_train_majority_label1中找到合适的值替换X_train_minority_label1中的数据')
         fairness_shapley_minority_value_label1 = fairness_explainer_original.shap_values(
                                     X = X_train_minority_label1.values,
+                                    Y = y_train_minority_label1.values,
                                     X_baseline = X_train_majority_label1.values,
                                     matching=matching_minority_label1,
-                                    sample_size=1000,
+                                    sample_size=500,
                                     shap_sample_size="auto",
                                 )
         
@@ -173,9 +183,10 @@ class Experiment:
         print('4(a). 使用fairshap, 从 X_train_minority_label0中找到合适的值替换X_train_majority_label0中的数据')
         fairness_shapley_majority_value_label0 = fairness_explainer_original.shap_values(
                                     X = X_train_majority_label0.values,
+                                    Y = y_train_majority_label0.values,
                                     X_baseline = X_train_minority_label0.values,
                                     matching=matching_majority_label0,
-                                    sample_size=1000,
+                                    sample_size=500,
                                     shap_sample_size="auto",
                                 )
         X_change_majority_label0 = X_train_majority_label0.copy()
@@ -183,9 +194,10 @@ class Experiment:
         print('4(b). 使用fairshap, 从 X_train_minority_label1中找到合适的值替换X_train_majority_label1中的数据')
         fairness_shapley_majority_value_label1 = fairness_explainer_original.shap_values(
                                     X = X_train_majority_label1.values,
+                                    Y = y_train_majority_label1.values,
                                     X_baseline = X_train_minority_label1.values,
                                     matching=matching_majority_label1,
-                                    sample_size=1000,
+                                    sample_size=500,
                                     shap_sample_size="auto",
                                 )  
         X_change_majority_label1 = X_train_majority_label1.copy()
@@ -219,6 +231,9 @@ class Experiment:
         values_range = np.arange(1, non_zero_count, self.gap)
         after_values_on_test_set = []
         after_values_on_train_set = []
+        after_DP_on_test_set = []
+        after_EO_on_test_set = []
+        after_PQP_on_test_set = []
         fairness_accuracy_pairs = []
         changed_value_info = []   # 存储修改的值的信息(column, before_value, after_value)
         for action_number in values_range:
@@ -249,10 +264,22 @@ class Experiment:
             model_new.fit(x, y)
             after = fairness_value_function(sen_att, priv_val, unpriv_dict, self.X_test.values, model_new)
             after_values_on_test_set.append(after)
-            # after_value = fairness_value_function(sen_att, priv_val, unpriv_dict, x.values, model_new)
-            # after_values_on_train_set.append(after_value)
-
             
+            # step7: 评估新模型在其他fairnes measures上的表现
+            if self.dataset_name != 'compas4race':
+                priv_idx = self.X_test['sex'].to_numpy().astype(bool)
+            else:
+                priv_idx = self.X_test['race'].to_numpy().astype(bool)
+            y_hat = model_new.predict(self.X_test)
+            y_test = self.y_test
+            g1_Cm, g0_Cm = marginalised_np_mat(y_test, y_hat, 1, priv_idx)
+            fair_grp1 = grp1_DP(g1_Cm, g0_Cm)[0]
+            fair_grp2 = grp2_EO(g1_Cm, g0_Cm)[0]
+            fair_grp3 = grp3_PQP(g1_Cm, g0_Cm)[0]
+            after_DP_on_test_set.append(fair_grp1)
+            after_EO_on_test_set.append(fair_grp2)
+            after_PQP_on_test_set.append(fair_grp3)
+
             if after < self.original_Xtest_DR:
                 y_new_pred = model_new.predict(self.X_test)
                 accuracy_new = accuracy_score(self.y_test, y_new_pred)
@@ -261,14 +288,17 @@ class Experiment:
         #修改不同位置后训练的new_model在相应修改后的training set上的DR值
         # viz1(values_range, after_values_on_train_set, self.original_Xtrain_DR, title='new_model\'s DR on training set')
         #修改不同位置后训练的new_model在test set上的DR值
-        viz1(values_range, after_values_on_test_set, self.original_Xtest_DR, title='new_model\'s DR on test set')
+        viz1(values_range, after_values_on_test_set, self.original_Xtest_DR, title='new_model\'s DR on test set',color='purple')
+        viz1(values_range, after_DP_on_test_set, self.original_Xtest_DP, title='new_model\'s DP on test set', color='g')
+        viz1(values_range, after_EO_on_test_set, self.original_Xtest_EO, title='new_model\'s EO on test set', color='b')
+        viz1(values_range, after_PQP_on_test_set, self.original_Xtest_PQP, title='new_model\'s PQP on test set',color='y')
         viz2(fairness_accuracy_pairs, self.original_Xtest_acc, title='Accuracy vs. DR')
 
         changed_value_info_df = pd.DataFrame(changed_value_info, columns=['Column', 'Before Value', 'After Value'])
         changed_value_info_df.to_csv('changed_value_info.csv', index=True)
 
-
-        return after_values_on_test_set, fairness_accuracy_pairs
+        pass
+        # return after_values_on_test_set, fairness_accuracy_pairs
     
     
 
@@ -291,7 +321,7 @@ def fix_negative_probabilities_select_larger(varphi):
     1. Filtering out values less than or equal to 0.1.
     2. Normalizing the probabilities to sum to 1.
     """
-
+    # varphi = np.abs(varphi)
     varphi = np.where(varphi > 0.1, varphi, 0)
     # varphi = np.where(varphi < - 0.1, varphi, 0)
     # varphi = np.abs(varphi)
@@ -326,12 +356,12 @@ def viz_varphi(varphi):
 
 
 
-def viz1(values_range, after_values, original_DR, title):
+def viz1(values_range, after_values, original_DR, title, color='b'):
     '''
     绘制修改后的DR值与修改的action number的散点图
     '''
     plt.figure(figsize=(10, 6))
-    plt.scatter(values_range, after_values, label='New model', marker='x')
+    plt.scatter(values_range, after_values, label='New model', marker='x', color=color)
     plt.axhline(y=original_DR, color='r', linestyle='--', label='Original DR')
     plt.title(title, fontsize=10)
     plt.xlabel('Limited actions')
