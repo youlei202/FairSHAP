@@ -156,10 +156,12 @@ class ExperimentDR:
 
         print('5. 计算出varphi和q')
         # 筛选出shapley value大于0.1的值，其他值设为0，然后归一化
-        varphi_minority_label0 = fix_negative_probabilities_select_larger(fairness_shapley_minority_value_label0)
-        varphi_minority_label1 = fix_negative_probabilities_select_larger(fairness_shapley_minority_value_label1)
-        varphi_minority = np.vstack((varphi_minority_label0, varphi_minority_label1))
-        non_zero_count_minority =np.count_nonzero(varphi_minority_label0) + np.count_nonzero(varphi_minority_label1)
+
+        # viz_varphi(varphi=fairness_shapley_minority_value_label0)
+        # viz_varphi(varphi=fairness_shapley_minority_value_label1)
+
+        fairness_shapley_minority_value = np.vstack((fairness_shapley_minority_value_label0, fairness_shapley_minority_value_label1))
+        non_zero_count_minority = np.sum(fairness_shapley_minority_value > 0.1)
         print(f"在X_train_minority中shapely value中大于0.1的值的个数有: {non_zero_count_minority}")
         q_minority_label0 = DataComposer(
                         x_counterfactual=X_base_minority_label0.values, 
@@ -205,12 +207,9 @@ class ExperimentDR:
             
         print('5. 计算出varphi和q')
         # 筛选出shapley value大于0.1的值，其他值设为0，然后归一化
-        varphi_majority_label0 = fix_negative_probabilities_select_larger(fairness_shapley_majority_value_label0)
-        varphi_majority_label1 = fix_negative_probabilities_select_larger(fairness_shapley_majority_value_label1)
-        varphi_majority = np.vstack((varphi_majority_label0, varphi_majority_label1))
-        non_zero_count_majority =np.count_nonzero(varphi_majority_label0) + np.count_nonzero(varphi_majority_label1)
-        # viz_varphi(varphi=fairness_shapley_value_label0)
-        # viz_varphi(varphi=fairness_shapley_value_label1)
+        fairness_shapley_majority_value = np.vstack((fairness_shapley_majority_value_label0, fairness_shapley_majority_value_label1))
+        non_zero_count_majority =np.sum(fairness_shapley_majority_value > 0.1)
+
         print(f"在X_train_majority中shapely value中大于0.1的值的个数有: {non_zero_count_majority}")
         q_majority_label0 = DataComposer(
                         x_counterfactual=X_base_majority_label0.values, 
@@ -221,8 +220,8 @@ class ExperimentDR:
                         joint_prob=matching_majority_label1, 
                         method="max").calculate_q()
         q_majority = np.vstack((q_majority_label0, q_majority_label1))
-
-        varphi = np.vstack((varphi_minority, varphi_majority))
+        fairness_shapley_value = np.vstack((fairness_shapley_minority_value, fairness_shapley_majority_value))
+        varphi = fix_negative_probabilities_select_larger(fairness_shapley_value)
         q = np.vstack((q_minority,q_majority))   # q_minority_label0 + q_minority_label1 + q_majority_label0 + q_majority_label1
         X_change = pd.concat([X_change_minority_label0, X_change_minority_label1, X_change_majority_label0, X_change_majority_label1], axis=0)
         non_zero_count = non_zero_count_majority + non_zero_count_minority
@@ -328,7 +327,9 @@ def fix_negative_probabilities_select_larger(varphi):
 
     total_prob = varphi.sum()
     if total_prob == 0:
-        raise ValueError("All probabilities are zero after filtering values <= -0.1.")
+        # print("All probabilities are zero after filtering values <= 0.1.")
+        # return varphi
+        raise ValueError("All probabilities are zero after filtering values <= 0.1.")
     varphi = varphi / total_prob
     return varphi
 
@@ -338,18 +339,18 @@ def viz_varphi(varphi):
     绘制varphi的分布图
     '''
     varphi_flat = varphi.flatten()
-    # 去掉varphi中小于0.001的值
-    varphi_flat = varphi_flat[varphi_flat >= 0.001]
+    # # 去掉varphi中小于0.001的值
+    varphi_flat = varphi_flat[varphi_flat >= -0.05]
 
     plt.figure(figsize=(10, 6))
-    counts, bins, patches = plt.hist(varphi_flat, bins=50, edgecolor='black', alpha=0.7)
+    counts, bins, patches = plt.hist(varphi_flat, bins=100, edgecolor='black', alpha=0.7)
     # 在柱状图上显示数值
     for count, bin_edge in zip(counts, bins):
         plt.text(bin_edge, count, str(int(count)), ha='center', va='bottom')
 
     plt.title('Distribution of varphi values')
     plt.xlabel('Value')
-    plt.xlim(0.01,0.5)
+    plt.xlim(-0.05,0.2)
     plt.ylabel('Frequency')
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.show()

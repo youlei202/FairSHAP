@@ -63,7 +63,6 @@ class WeightedExplainer:
 
     def _fairness_value_function(self, X):
         if self.fairshap_base == "DR":
-            print(f'X.shape:{X.shape}')
             X_disturbed = perturb_numpy_ver(
                 X=X,
                 sen_att=self.sen_att,
@@ -77,68 +76,91 @@ class WeightedExplainer:
             # result = np.abs(fx - fx_q)
             # print(f'result.shape:{result.shape}')
             return np.abs(fx - fx_q)
+        
         elif self.fairshap_base == "DP":
             outputs = []
             n_samples = X.shape[0]
-            
             # 对每个样本分别计算
             for i in range(n_samples):
                 # 取出第 i 个样本 (保持二维)
-                xi = X[i:i+1, :]
-                
+                xi = X[i:i+1, :]     
                 # 对应的敏感属性布尔索引
                 priv_idx_i = xi[:, self.sen_att[0]]
-                priv_idx_i = np.array(priv_idx_i, dtype=bool)
-                
+                priv_idx_i = np.array(priv_idx_i, dtype=bool)       
                 # 模型预测
                 y_hat_i = self.model.predict(xi)
-                
                 # 构造真实标签（假设 self.y 为单个标签值）
                 y_i = np.array([self.y])
-                
                 # 计算该样本的混合矩阵统计
                 g1_Cm, g0_Cm = marginalised_np_mat(y_i, y_hat_i, 1, priv_idx_i)
-                
                 # 根据混合矩阵统计计算 g1 和 g0
                 g1 = g1_Cm[0] + g1_Cm[1]
                 g1 = zero_division(g1, sum(g1_Cm))
                 g0 = g0_Cm[0] + g0_Cm[1]
                 g0 = zero_division(g0, sum(g0_Cm))
-                
                 # 计算该样本的 DP 公平性值
                 sample_output = np.abs(g0 - g1)
                 outputs.append(sample_output)
-            
             outputs = np.array(outputs).reshape(-1, 1)
             # print(f'outputs.shape:{outputs.shape}')
             return outputs
-        # elif self.fairshap_base == "DP":
+        
+        elif self.fairshap_base == "EO":
+            outputs = []
+            n_samples = X.shape[0]
+            # 对每个样本分别计算
+            for i in range(n_samples):
+                # 取出第 i 个样本 (保持二维)
+                xi = X[i:i+1, :]     
+                # 对应的敏感属性布尔索引
+                priv_idx_i = xi[:, self.sen_att[0]]
+                priv_idx_i = np.array(priv_idx_i, dtype=bool)       
+                # 模型预测
+                y_hat_i = self.model.predict(xi)
+                # 构造真实标签（假设 self.y 为单个标签值）
+                y_i = np.array([self.y])
+                # 计算该样本的混合矩阵统计
+                g1_Cm, g0_Cm = marginalised_np_mat(y_i, y_hat_i, 1, priv_idx_i)
+                # 根据混合矩阵统计计算 g1 和 g0
+                g1 = g1_Cm[0] + g1_Cm[2]
+                g1 = zero_division(g1_Cm[0], g1)
+                g0 = g0_Cm[0] + g0_Cm[2]
+                g0 = zero_division(g0_Cm[0], g0)
+                # 计算该样本的 DP 公平性值
+                sample_output = np.abs(g0 - g1)
+                outputs.append(sample_output)
+            outputs = np.array(outputs).reshape(-1, 1)
+            # print(f'outputs.shape:{outputs.shape}')
+            return outputs
+        
+        elif self.fairshap_base == "PQP":
+            outputs = []
+            n_samples = X.shape[0]
+            # 对每个样本分别计算
+            for i in range(n_samples):
+                # 取出第 i 个样本 (保持二维)
+                xi = X[i:i+1, :]     
+                # 对应的敏感属性布尔索引
+                priv_idx_i = xi[:, self.sen_att[0]]
+                priv_idx_i = np.array(priv_idx_i, dtype=bool)       
+                # 模型预测
+                y_hat_i = self.model.predict(xi)
+                # 构造真实标签（假设 self.y 为单个标签值）
+                y_i = np.array([self.y])
+                # 计算该样本的混合矩阵统计
+                g1_Cm, g0_Cm = marginalised_np_mat(y_i, y_hat_i, 1, priv_idx_i)
+                # 根据混合矩阵统计计算 g1 和 g0
+                g1 = g1_Cm[0] + g1_Cm[1]
+                g1 = zero_division(g1_Cm[0], g1)
+                g0 = g0_Cm[0] + g0_Cm[1]
+                g0 = zero_division(g0_Cm[0], g0)
+                # 计算该样本的 DP 公平性值
+                sample_output = np.abs(g0 - g1)
+                outputs.append(sample_output)
+            outputs = np.array(outputs).reshape(-1, 1)
+            # print(f'outputs.shape:{outputs.shape}')
+            return outputs
 
-        #     '''
-        #     Problem！
-
-        #     这里随着x增加:假设为x.shape=(254,26), 输出的output.shape还是(1,1)
-        #     但是在'DR'处, 假设x.shape=(254,26), 输出的result.shape=(254,)
-
-        #     思考？
-        #     是不是因为这里的计算是基于整体数据的，而'DR'处是基于单个样本的？
-        #     所以考虑把这里的计算改成基于单个样本的计算？
-        #     '''
-        #     priv_idx = X[:,self.sen_att[0]]
-        #     priv_idx = np.array(priv_idx, dtype=bool)
-        #     y_hat = self.model.predict(X)
-        #     y = np.array([self.y])  # 形状如 (1, ...)   
-        #     y = np.repeat(y, len(y_hat))   # 将会把 y 扩展为 shape: (254,)
-
-
-        #     g1_Cm, g0_Cm = marginalised_np_mat(y, y_hat, 1, priv_idx)
-        #     g1 = g1_Cm[0] + g1_Cm[1]
-        #     g1 = zero_division(g1, sum(g1_Cm))
-        #     g0 = g0_Cm[0] + g0_Cm[1]
-        #     g0 = zero_division(g0, sum(g0_Cm))
-        #     output = np.abs(g0 - g1)  
-
-        #     return np.array(output).reshape(-1, 1) 
         else:
             raise ValueError("Fairness base not supported")
 
