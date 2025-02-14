@@ -71,7 +71,7 @@ class ExperimentDR:
             self.gap = 1
         elif self.dataset_name == 'adult':
             self.sen_att_name = ['sex']
-            self.gap = 1
+            self.gap = 10
         elif self.dataset_name == 'compas':
             self.sen_att_name = ['sex']
             self.gap = 1
@@ -135,7 +135,7 @@ class ExperimentDR:
                                     Y = y_train_minority_label0.values,
                                     X_baseline = X_train_majority_label0.values,
                                     matching=matching_minority_label0,
-                                    sample_size=500,
+                                    sample_size=2000,
                                     shap_sample_size="auto",
                                 )
         X_change_minority_label0 = X_train_minority_label0.copy()
@@ -146,7 +146,7 @@ class ExperimentDR:
                                     Y = y_train_minority_label1.values,
                                     X_baseline = X_train_majority_label1.values,
                                     matching=matching_minority_label1,
-                                    sample_size=500,
+                                    sample_size=2000,
                                     shap_sample_size="auto",
                                 )
         
@@ -188,7 +188,7 @@ class ExperimentDR:
                                     Y = y_train_majority_label0.values,
                                     X_baseline = X_train_minority_label0.values,
                                     matching=matching_majority_label0,
-                                    sample_size=500,
+                                    sample_size=2000,
                                     shap_sample_size="auto",
                                 )
         X_change_majority_label0 = X_train_majority_label0.copy()
@@ -199,7 +199,7 @@ class ExperimentDR:
                                     Y = y_train_majority_label1.values,
                                     X_baseline = X_train_minority_label1.values,
                                     matching=matching_majority_label1,
-                                    sample_size=500,
+                                    sample_size=2000,
                                     shap_sample_size="auto",
                                 )  
         X_change_majority_label1 = X_train_majority_label1.copy()

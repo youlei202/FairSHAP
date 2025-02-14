@@ -67,23 +67,23 @@ class Baseline:
         if self.dataset_name == 'german_credit':
             self.sen_att_name = ['sex']
             self.gap = 1
-            self.change_num = 150
+            self.change_num = 200
         elif self.dataset_name == 'adult':
             self.sen_att_name = ['sex']
             self.gap = 1
-            self.change_num = 500
+            self.change_num = 200
         elif self.dataset_name == 'compas':
             self.sen_att_name = ['sex']
             self.gap = 1
-            self.change_num = 300
+            self.change_num = 200
         elif self.dataset_name == 'compas4race':
             self.sen_att_name = ['race']
             self.gap = 1
-            self.change_num = 300
+            self.change_num = 200
         elif self.dataset_name == 'census_income':
             self.sen_att_name = ['sex']
             self.gap = 1
-            self.change_num = 800
+            self.change_num = 200
 
         # elif self.dataset_name == 'default_credit':
         #     self.sen_att_name = ['sex']
