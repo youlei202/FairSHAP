@@ -83,6 +83,10 @@ class Experiment:
         print(f"1. Split the {self.dataset_name} dataset into majority group and minority group according to the number of sensitive attribute, besides split by label 0 and label 1")
         X_train_majority_label0, y_train_majority_label0, X_train_majority_label1, y_train_majority_label1, X_train_minority_label0, y_train_minority_label0, X_train_minority_label1, y_train_minority_label1 = self._split_into_majority_minority_label0_label1()
 
+        print(f'X_train_majority_label0 shape: {X_train_majority_label0.shape}')
+        print(f'X_train_majority_label1 shape: {X_train_majority_label1.shape}')
+        print(f'X_train_minority_label0 shape: {X_train_minority_label0.shape}')
+        print(f'X_train_minority_label1 shape: {X_train_minority_label1.shape}')
         print('2. 初始化FairnessExplainer')
         sen_att_name = [self.sensitive_attri]
         sen_att = [self.X_test.columns.get_loc(name) for name in sen_att_name]
@@ -211,6 +215,8 @@ class Experiment:
         DP_results = []
         EO_results = []
         PQP_results = []
+
+
         for action_number in values_range:
             # Step 1: 将 varphi 的值和位置展开为一维
             flat_varphi = [(value, row, col) for row, row_vals in enumerate(varphi)
@@ -306,7 +312,7 @@ class Experiment:
             majority = self.X_train[self.sensitive_attri] == 0
             X_train_majority = self.X_train[majority]
             y_train_majority = self.y_train[majority]
-            minority = self.X_train['sex'] == 1
+            minority = self.X_train[self.sensitive_attri] == 1
             X_train_minority = self.X_train[minority]
             y_train_minority = self.y_train[minority]
 
@@ -314,7 +320,7 @@ class Experiment:
             majority = self.X_train[self.sensitive_attri] == 1
             X_train_majority = self.X_train[majority]
             y_train_majority = self.y_train[majority]
-            minority = self.X_train['sex'] == 0
+            minority = self.X_train[self.sensitive_attri] == 0
             X_train_minority = self.X_train[minority]
             y_train_minority = self.y_train[minority]
 

@@ -6,6 +6,7 @@ from typing import Tuple, List, Dict
 from xgboost import XGBClassifier
 import pdb
 import logging
+import os
 from sklearn.metrics import accuracy_score
 from src.matching.ot_matcher import OptimalTransportPolicy
 from src.matching.nn_matcher import NearestNeighborDataMatcher
@@ -71,7 +72,7 @@ class ExperimentDR:
             self.gap = 1
         elif self.dataset_name == 'adult':
             self.sen_att_name = ['sex']
-            self.gap = 10
+            self.gap = 1
         elif self.dataset_name == 'compas':
             self.sen_att_name = ['sex']
             self.gap = 1
@@ -107,6 +108,10 @@ class ExperimentDR:
         X_train_minority_label0 = self.X_train_minority.loc[y_train_minority_label0.index]
         X_train_minority_label1 = self.X_train_minority.loc[y_train_minority_label1.index]
 
+        print(f'X_train_majority_label0 shape: {X_train_majority_label0.shape}')
+        print(f'X_train_majority_label1 shape: {X_train_majority_label1.shape}')
+        print(f'X_train_minority_label0 shape: {X_train_minority_label0.shape}')
+        print(f'X_train_minority_label1 shape: {X_train_minority_label1.shape}')
 
         print('2. 初始化FairnessExplainer')
         sen_att_name = self.sen_att_name
@@ -296,6 +301,26 @@ class ExperimentDR:
         changed_value_info_df = pd.DataFrame(changed_value_info, columns=['Column', 'Before Value', 'After Value'])
         changed_value_info_df.to_csv('changed_value_info.csv', index=True)
 
+        print('8. 保存结果到csv文件')
+        df = pd.DataFrame({
+            "action_number": values_range,  # 直接使用 values_range
+            "new_DR": after_values_on_test_set,
+        })
+        # 在 DataFrame 的第一行添加 original 值
+        df.loc[-1] = ["original", self.original_Xtest_DR]  # 插入到第一行
+        df.index = df.index + 1  # 重新索引
+        df = df.sort_index()  # 确保 original 行在最上面
+
+        dataset_folder = os.path.join('saved_results', self.dataset_name)
+        os.makedirs(dataset_folder, exist_ok=True)
+
+        # 生成 CSV 文件名
+        csv_filename = f"old_version_results.csv"
+        csv_filepath = os.path.join(dataset_folder, csv_filename)
+
+        # 保存 CSV
+        df.to_csv(csv_filepath, index=False)
+        print(f"CSV 文件已保存：{csv_filepath}")
         pass
         # return after_values_on_test_set, fairness_accuracy_pairs
     
