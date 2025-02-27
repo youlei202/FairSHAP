@@ -75,89 +75,174 @@ class WeightedExplainer:
             # TODO: There might be problems when the classification problem is not binary
             # result = np.abs(fx - fx_q)
             # print(f'result.shape:{result.shape}')
-            return np.abs(fx - fx_q)
+            outputs = np.abs(fx - fx_q)
+            return outputs
         
         elif self.fairshap_base == "DP":
-            outputs = []
-            n_samples = X.shape[0]
-            # 对每个样本分别计算
-            for i in range(n_samples):
-                # 取出第 i 个样本 (保持二维)
-                xi = X[i:i+1, :]     
-                # 对应的敏感属性布尔索引
-                priv_idx_i = xi[:, self.sen_att[0]]
-                priv_idx_i = np.array(priv_idx_i, dtype=bool)       
-                # 模型预测
-                y_hat_i = self.model.predict(xi)
-                # 构造真实标签（假设 self.y 为单个标签值）
-                y_i = np.array([self.y])
-                # 计算该样本的混合矩阵统计
-                g1_Cm, g0_Cm = marginalised_np_mat(y_i, y_hat_i, 1, priv_idx_i)
-                # 根据混合矩阵统计计算 g1 和 g0
-                g1 = g1_Cm[0] + g1_Cm[1]
-                g1 = zero_division(g1, sum(g1_Cm))
-                g0 = g0_Cm[0] + g0_Cm[1]
-                g0 = zero_division(g0, sum(g0_Cm))
-                # 计算该样本的 DP 公平性值
-                sample_output = np.abs(g0 - g1)
-                outputs.append(sample_output)
-            outputs = np.array(outputs).reshape(-1, 1)
-            # print(f'outputs.shape:{outputs.shape}')
-            return outputs
-        
+            X_disturbed = perturb_numpy_ver(
+                X=X,
+                sen_att=self.sen_att,
+                priv_val=self.priv_val,
+                unpriv_dict=self.unpriv_dict,
+                ratio=1.0,
+            )
+            fx = self.model.predict_proba(X)[:, 1]
+            fx_q = self.model.predict_proba(X_disturbed)[:, 1]
+            threshold = 0.55
+
+            relu_fx = relu(fx-threshold)
+            relu_fx_q = relu(fx_q-threshold)
+
+            output_dp = relu_fx * relu_fx_q
+            return output_dp
+
         elif self.fairshap_base == "EO":
-            outputs = []
+            alpha = 0.8
+            X_disturbed = perturb_numpy_ver(
+                X=X,
+                sen_att=self.sen_att,
+                priv_val=self.priv_val,
+                unpriv_dict=self.unpriv_dict,
+                ratio=1.0,
+            )
+            fx = self.model.predict_proba(X)[:, 1]
+            fx_q = self.model.predict_proba(X_disturbed)[:, 1]
+            # TODO: There might be problems when the classification problem is not binary
+            # result = np.abs(fx - fx_q)
+            # print(f'result.shape:{result.shape}')
+            outputs_dr = np.abs(fx - fx_q)
+            # print(f'outputs_dr.shape:{outputs_dr.shape}')
+
+            outputs_recall = []
             n_samples = X.shape[0]
             # 对每个样本分别计算
             for i in range(n_samples):
                 # 取出第 i 个样本 (保持二维)
-                xi = X[i:i+1, :]     
-                # 对应的敏感属性布尔索引
-                priv_idx_i = xi[:, self.sen_att[0]]
-                priv_idx_i = np.array(priv_idx_i, dtype=bool)       
+                xi = X[i:i+1, :]       
                 # 模型预测
                 y_hat_i = self.model.predict(xi)
                 # 构造真实标签（假设 self.y 为单个标签值）
                 y_i = np.array([self.y])
-                # 计算该样本的混合矩阵统计
-                g1_Cm, g0_Cm = marginalised_np_mat(y_i, y_hat_i, 1, priv_idx_i)
-                # 根据混合矩阵统计计算 g1 和 g0
-                g1 = g1_Cm[0] + g1_Cm[2]
-                g1 = zero_division(g1_Cm[0], g1)
-                g0 = g0_Cm[0] + g0_Cm[2]
-                g0 = zero_division(g0_Cm[0], g0)
-                # 计算该样本的 DP 公平性值
-                sample_output = np.abs(g0 - g1)
-                outputs.append(sample_output)
-            outputs = np.array(outputs).reshape(-1, 1)
-            # print(f'outputs.shape:{outputs.shape}')
+                tp, fp, fn, tn = contingency_tab_bi(y_i, y_hat_i, pos=1)
+                recall = zero_division(tp, tp + fn)
+                outputs_recall.append(recall)
+            outputs_recall = np.array(outputs_recall).reshape(-1)  # 方法2
+            outputs = alpha * outputs_dr + (1 - alpha) * (1-outputs_recall)
+            return outputs         
+        # elif self.fairshap_base == "DR+sufficiency":
+            alpha = 0.8
+            X_disturbed = perturb_numpy_ver(
+                X=X,
+                sen_att=self.sen_att,
+                priv_val=self.priv_val,
+                unpriv_dict=self.unpriv_dict,
+                ratio=1.0,
+            )
+            fx = self.model.predict_proba(X)[:, 1]
+            fx_q = self.model.predict_proba(X_disturbed)[:, 1]
+            # TODO: There might be problems when the classification problem is not binary
+            # result = np.abs(fx - fx_q)
+            # print(f'result.shape:{result.shape}')
+            outputs_dr = np.abs(fx - fx_q)
+            # print(f'outputs_dr.shape:{outputs_dr.shape}')
+
+            outputs_sufficiency = []
+            n_samples = X.shape[0]
+            # 对每个样本分别计算
+            for i in range(n_samples):
+                # 取出第 i 个样本 (保持二维)
+                xi = X[i:i+1, :]       
+                # 模型预测
+                y_hat_i = self.model.predict(xi)
+                # 构造真实标签（假设 self.y 为单个标签值）
+                y_i = np.array([self.y])
+                tp, fp, fn, tn = contingency_tab_bi(y_i, y_hat_i, pos=1)
+                sufficiency = zero_division(tn, tn + fp)  # 修改为计算 sufficiency
+                outputs_sufficiency.append(sufficiency)
+            outputs_sufficiency = np.array(outputs_sufficiency).reshape(-1)  # 方法2
+            outputs = alpha * outputs_dr + (1 - alpha) * (1 - outputs_sufficiency)
             return outputs
+        # elif self.fairshap_base == "DP":
+        #     outputs = []
+        #     n_samples = X.shape[0]
+        #     # 对每个样本分别计算
+        #     for i in range(n_samples):
+        #         # 取出第 i 个样本 (保持二维)
+        #         xi = X[i:i+1, :]     
+        #         # 对应的敏感属性布尔索引
+        #         priv_idx_i = xi[:, self.sen_att[0]]
+        #         priv_idx_i = np.array(priv_idx_i, dtype=bool)       
+        #         # 模型预测
+        #         y_hat_i = self.model.predict(xi)
+        #         # 构造真实标签（假设 self.y 为单个标签值）
+        #         y_i = np.array([self.y])
+        #         # 计算该样本的混合矩阵统计
+        #         g1_Cm, g0_Cm = marginalised_np_mat(y_i, y_hat_i, 1, priv_idx_i)
+        #         # 根据混合矩阵统计计算 g1 和 g0
+        #         g1 = g1_Cm[0] + g1_Cm[1]
+        #         g1 = zero_division(g1, sum(g1_Cm))
+        #         g0 = g0_Cm[0] + g0_Cm[1]
+        #         g0 = zero_division(g0, sum(g0_Cm))
+        #         # 计算该样本的 DP 公平性值
+        #         sample_output = np.abs(g0 - g1)
+        #         outputs.append(sample_output)
+        #     outputs = np.array(outputs).reshape(-1)
+        #     # print(f'outputs.shape:{outputs.shape}')
+        #     return outputs
         
-        elif self.fairshap_base == "PQP":
-            outputs = []
-            n_samples = X.shape[0]
-            # 对每个样本分别计算
-            for i in range(n_samples):
-                # 取出第 i 个样本 (保持二维)
-                xi = X[i:i+1, :]     
-                # 对应的敏感属性布尔索引
-                priv_idx_i = xi[:, self.sen_att[0]]
-                priv_idx_i = np.array(priv_idx_i, dtype=bool)       
-                # 模型预测
-                y_hat_i = self.model.predict(xi)
-                # 构造真实标签（假设 self.y 为单个标签值）
-                y_i = np.array([self.y])
-                # 计算该样本的混合矩阵统计
-                g1_Cm, g0_Cm = marginalised_np_mat(y_i, y_hat_i, 1, priv_idx_i)
-                # 根据混合矩阵统计计算 g1 和 g0
-                g1 = g1_Cm[0] + g1_Cm[1]
-                g1 = zero_division(g1_Cm[0], g1)
-                g0 = g0_Cm[0] + g0_Cm[1]
-                g0 = zero_division(g0_Cm[0], g0)
-                # 计算该样本的 DP 公平性值
-                sample_output = np.abs(g0 - g1)
-                outputs.append(sample_output)
-            outputs = np.array(outputs).reshape(-1, 1)
+        # elif self.fairshap_base == "EO":
+        #     outputs = []
+        #     n_samples = X.shape[0]
+        #     # 对每个样本分别计算
+        #     for i in range(n_samples):
+        #         # 取出第 i 个样本 (保持二维)
+        #         xi = X[i:i+1, :]     
+        #         # 对应的敏感属性布尔索引
+        #         priv_idx_i = xi[:, self.sen_att[0]]
+        #         priv_idx_i = np.array(priv_idx_i, dtype=bool)       
+        #         # 模型预测
+        #         y_hat_i = self.model.predict(xi)
+        #         # 构造真实标签（假设 self.y 为单个标签值）
+        #         y_i = np.array([self.y])
+        #         # 计算该样本的混合矩阵统计
+        #         g1_Cm, g0_Cm = marginalised_np_mat(y_i, y_hat_i, 1, priv_idx_i)
+        #         # 根据混合矩阵统计计算 g1 和 g0
+        #         g1 = g1_Cm[0] + g1_Cm[2]
+        #         g1 = zero_division(g1_Cm[0], g1)
+        #         g0 = g0_Cm[0] + g0_Cm[2]
+        #         g0 = zero_division(g0_Cm[0], g0)
+        #         # 计算该样本的 DP 公平性值
+        #         sample_output = np.abs(g0 - g1)
+        #         outputs.append(sample_output)
+        #     outputs = np.array(outputs).reshape(-1)
+        #     # print(f'outputs.shape:{outputs.shape}')
+        #     return outputs
+        
+        # elif self.fairshap_base == "PQP":
+        #     outputs = []
+        #     n_samples = X.shape[0]
+        #     # 对每个样本分别计算
+        #     for i in range(n_samples):
+        #         # 取出第 i 个样本 (保持二维)
+        #         xi = X[i:i+1, :]     
+        #         # 对应的敏感属性布尔索引
+        #         priv_idx_i = xi[:, self.sen_att[0]]
+        #         priv_idx_i = np.array(priv_idx_i, dtype=bool)       
+        #         # 模型预测
+        #         y_hat_i = self.model.predict(xi)
+        #         # 构造真实标签（假设 self.y 为单个标签值）
+        #         y_i = np.array([self.y])
+        #         # 计算该样本的混合矩阵统计
+        #         g1_Cm, g0_Cm = marginalised_np_mat(y_i, y_hat_i, 1, priv_idx_i)
+        #         # 根据混合矩阵统计计算 g1 和 g0
+        #         g1 = g1_Cm[0] + g1_Cm[1]
+        #         g1 = zero_division(g1_Cm[0], g1)
+        #         g0 = g0_Cm[0] + g0_Cm[1]
+        #         g0 = zero_division(g0_Cm[0], g0)
+        #         # 计算该样本的 DP 公平性值
+        #         sample_output = np.abs(g0 - g1)
+        #         outputs.append(sample_output)
+        #     outputs = np.array(outputs).reshape(-1)
             # print(f'outputs.shape:{outputs.shape}')
             return outputs
 
@@ -305,3 +390,6 @@ def grp3_PQP(g1_Cm, g0_Cm):
     g0 = g0_Cm[0] + g0_Cm[1]
     g0 = zero_division(g0_Cm[0], g0)
     return abs(g0 - g1), float(g1), float(g0)
+
+def relu(x):
+    return np.maximum(0, x)
