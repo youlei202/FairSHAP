@@ -2,6 +2,7 @@ from sklearn.model_selection import KFold
 import numpy as np
 from src.experiments.experiment import Experiment
 from src.experiments.experiment_eo import Experiment as ExperimentEO
+from src.experiments.experiment_new_eo import Experiment as ExperimentNewEO
 import pandas as pd
 # 假设 model 是你的模型
 
@@ -25,7 +26,7 @@ def evaluate_model(model, X_train:pd.DataFrame, y_train:pd.Series, num_folds, da
             experiment = Experiment(model=model, X_train=X_train_fold, y_train=y_train_fold, X_test=X_val_fold, y_test=y_val_fold, dataset_name=dataset_name, fairshap_base=fairshap_base)
             experiment.run(ith_fold=i)
         elif fairshap_base == 'EO':
-            experiment = ExperimentEO(model=model, X_train=X_train_fold, y_train=y_train_fold, X_test=X_val_fold, y_test=y_val_fold, dataset_name=dataset_name, fairshap_base=fairshap_base)
+            experiment = ExperimentNewEO(model=model, X_train=X_train_fold, y_train=y_train_fold, X_test=X_val_fold, y_test=y_val_fold, dataset_name=dataset_name, fairshap_base=fairshap_base)
             experiment.run(ith_fold=i)
         i += 1
 

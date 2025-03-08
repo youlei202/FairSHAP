@@ -137,8 +137,8 @@ class Experiment:
         X_base_minority_label1 = X_train_majority_label1
         print('5. 计算出varphi和q')
         # fairness_shapley_minority_value = np.vstack((fairness_shapley_minority_value_label0, fairness_shapley_minority_value_label1))
-        non_zero_count_minority_label1 = np.sum(fairness_shapley_minority_value_label1 > 0.1)
-        print(f"在X_train_minority_label1中shapely value中大于0.1的值的个数有: {non_zero_count_minority_label1}")
+        non_zero_count_minority_label1 = np.sum(fairness_shapley_minority_value_label1 < -0.1)
+        print(f"在X_train_minority_label1中shapely value中小于-0.1的值的个数有: {non_zero_count_minority_label1}")
         # q_minority_label0 = DataComposer(
         #                 x_counterfactual=X_base_minority_label0.values, 
         #                 joint_prob=matching_minority_label0, 
@@ -181,9 +181,9 @@ class Experiment:
         print('5. 计算出varphi和q')
         # 筛选出shapley value大于0.1的值，其他值设为0，然后归一化
         # fairness_shapley_majority_value = np.vstack((fairness_shapley_majority_value_label0, fairness_shapley_majority_value_label1))
-        non_zero_count_majority_label1 =np.sum(fairness_shapley_majority_value_label1 > 0.1)
+        non_zero_count_majority_label1 =np.sum(fairness_shapley_majority_value_label1 < -0.1)
 
-        print(f"在X_train_majority中shapely value中大于0.1的值的个数有: {non_zero_count_majority_label1}")
+        print(f"在X_train_majority_label1中shapely value中小于-0.1的值的个数有: {non_zero_count_majority_label1}")
         # q_majority_label0 = DataComposer(
         #                 x_counterfactual=X_base_majority_label0.values, 
         #                 joint_prob=matching_majority_label0, 

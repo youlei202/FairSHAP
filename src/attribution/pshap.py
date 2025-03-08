@@ -88,16 +88,14 @@ class WeightedExplainer:
             )
             fx = self.model.predict_proba(X)[:, 1]
             fx_q = self.model.predict_proba(X_disturbed)[:, 1]
-            threshold = 0.55
+            threshold = 0.5
 
             relu_fx = relu(fx-threshold)
             relu_fx_q = relu(fx_q-threshold)
 
             output_dp = relu_fx * relu_fx_q
             return output_dp
-
         elif self.fairshap_base == "EO":
-            alpha = 0.8
             X_disturbed = perturb_numpy_ver(
                 X=X,
                 sen_att=self.sen_att,
@@ -107,28 +105,78 @@ class WeightedExplainer:
             )
             fx = self.model.predict_proba(X)[:, 1]
             fx_q = self.model.predict_proba(X_disturbed)[:, 1]
-            # TODO: There might be problems when the classification problem is not binary
-            # result = np.abs(fx - fx_q)
-            # print(f'result.shape:{result.shape}')
-            outputs_dr = np.abs(fx - fx_q)
-            # print(f'outputs_dr.shape:{outputs_dr.shape}')
+            threshold = 0.6
 
-            outputs_recall = []
-            n_samples = X.shape[0]
-            # 对每个样本分别计算
-            for i in range(n_samples):
-                # 取出第 i 个样本 (保持二维)
-                xi = X[i:i+1, :]       
-                # 模型预测
-                y_hat_i = self.model.predict(xi)
-                # 构造真实标签（假设 self.y 为单个标签值）
-                y_i = np.array([self.y])
-                tp, fp, fn, tn = contingency_tab_bi(y_i, y_hat_i, pos=1)
-                recall = zero_division(tp, tp + fn)
-                outputs_recall.append(recall)
-            outputs_recall = np.array(outputs_recall).reshape(-1)  # 方法2
-            outputs = alpha * outputs_dr + (1 - alpha) * (1-outputs_recall)
-            return outputs         
+            relu_fx = relu(fx-threshold)
+            relu_fx_q = relu(fx_q-threshold)
+
+            output_dp = relu_fx * relu_fx_q
+            return output_dp
+            # fx_q = self.model.predict_proba(X_disturbed)[:, 1]
+            # threshold = 0.6
+
+            # relu_fx = relu(fx-threshold)
+            # relu_fx_q = relu(fx_q-threshold)
+
+            # output_dp = relu_fx * relu_fx_q
+            # return output_dp
+        
+
+
+            # # X_disturbed = perturb_numpy_ver(
+            # #     X=X,
+            # #     sen_att=self.sen_att,
+            # #     priv_val=self.priv_val,
+            # #     unpriv_dict=self.unpriv_dict,
+            # #     ratio=1.0,
+            # # )
+            # threshold = 0.5
+            # fx = self.model.predict_proba(X)[:, 1]
+            # # fx_q = self.model.predict_proba(X_disturbed)[:, 1]
+
+            # # if fx < threshold:
+            # #     return fx
+            # # else:
+            # #     return 10
+            # # result = np.where(fx < threshold, fx, 100)
+            # return fx
+            # relu_fx = relu(threshold-fx)
+            # # relu_fx_q = relu(fx_q-threshold)
+            # output_eo = relu_fx 
+            # return output_eo
+        # elif self.fairshap_base == "EO":
+        #     alpha = 0.8
+        #     X_disturbed = perturb_numpy_ver(
+        #         X=X,
+        #         sen_att=self.sen_att,
+        #         priv_val=self.priv_val,
+        #         unpriv_dict=self.unpriv_dict,
+        #         ratio=1.0,
+        #     )
+        #     fx = self.model.predict_proba(X)[:, 1]
+        #     fx_q = self.model.predict_proba(X_disturbed)[:, 1]
+        #     # TODO: There might be problems when the classification problem is not binary
+        #     # result = np.abs(fx - fx_q)
+        #     # print(f'result.shape:{result.shape}')
+        #     outputs_dr = np.abs(fx - fx_q)
+        #     # print(f'outputs_dr.shape:{outputs_dr.shape}')
+
+        #     outputs_recall = []
+        #     n_samples = X.shape[0]
+        #     # 对每个样本分别计算
+        #     for i in range(n_samples):
+        #         # 取出第 i 个样本 (保持二维)
+        #         xi = X[i:i+1, :]       
+        #         # 模型预测
+        #         y_hat_i = self.model.predict(xi)
+        #         # 构造真实标签（假设 self.y 为单个标签值）
+        #         y_i = np.array([self.y])
+        #         tp, fp, fn, tn = contingency_tab_bi(y_i, y_hat_i, pos=1)
+        #         recall = zero_division(tp, tp + fn)
+        #         outputs_recall.append(recall)
+        #     outputs_recall = np.array(outputs_recall).reshape(-1)  # 方法2
+        #     outputs = alpha * outputs_dr + (1 - alpha) * (1-outputs_recall)
+        #     return outputs         
         # elif self.fairshap_base == "DR+sufficiency":
             alpha = 0.8
             X_disturbed = perturb_numpy_ver(

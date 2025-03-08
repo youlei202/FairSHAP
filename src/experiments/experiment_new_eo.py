@@ -46,7 +46,7 @@ class Experiment:
                  X_test: pd.DataFrame,
                  y_test: pd.Series,
                  dataset_name: str,
-                 fairshap_base: str = 'DR',   # 'DR', 'DR+precision', 'DR+recall', 'DR+sufficiency'
+                 fairshap_base: str = 'EO',   # 'EO'
                  ):
         self.model = model
         self.X_train = X_train
@@ -83,11 +83,11 @@ class Experiment:
         self.ith_fold = ith_fold
         print(f"1. Split the {self.dataset_name} dataset into majority group and minority group according to the number of sensitive attribute, besides split by label 0 and label 1")
         X_train_majority_label0, y_train_majority_label0, X_train_majority_label1, y_train_majority_label1, X_train_minority_label0, y_train_minority_label0, X_train_minority_label1, y_train_minority_label1 = self._split_into_majority_minority_label0_label1()
-
         print(f'X_train_majority_label0 shape: {X_train_majority_label0.shape}')
         print(f'X_train_majority_label1 shape: {X_train_majority_label1.shape}')
         print(f'X_train_minority_label0 shape: {X_train_minority_label0.shape}')
         print(f'X_train_minority_label1 shape: {X_train_minority_label1.shape}')
+
         print('2. 初始化FairnessExplainer')
         sen_att_name = [self.sensitive_attri]
         sen_att = [self.X_test.columns.get_loc(name) for name in sen_att_name]
@@ -102,118 +102,87 @@ class Experiment:
                 unpriv_dict=unpriv_dict,
                 fairshap_base=self.fairshap_base
                 )
-        
-        print('--------接下来先对minority group进行修改--------')
-        print('3(a). 将X_train_minority_label0与X_train_majority_label0进行匹配')
-        matching_minority_label0 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label0, X_unlabeled=X_train_majority_label0).match(n_neighbors=1)
-        print('3(b). 将X_train_minority_label1与X_train_majority_label1进行匹配')
-        matching_minority_label1 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label1, X_unlabeled=X_train_majority_label1).match(n_neighbors=1)
-        print('4(a). 使用FairSHAP, 从 X_train_majority_label0中找到合适的值替换X_train_minority_label0中的数据')
-        fairness_shapley_minority_value_label0 = fairness_explainer_original.shap_values(
-                                    X = X_train_minority_label0.values,
-                                    Y = y_train_minority_label0.values,
-                                    X_baseline = X_train_majority_label0.values,
-                                    matching=matching_minority_label0,
-                                    sample_size=2000,
-                                    shap_sample_size="auto",
-                                )
-        X_change_minority_label0 = X_train_minority_label0.copy()
-        X_base_minority_label0 = X_train_majority_label0
-        print('4(b). 使用FairSHAP, 从 X_train_majority_label1中找到合适的值替换X_train_minority_label1中的数据')
-        fairness_shapley_minority_value_label1 = fairness_explainer_original.shap_values(
-                                    X = X_train_minority_label1.values,
-                                    Y = y_train_minority_label1.values,
-                                    X_baseline = X_train_majority_label1.values,
-                                    matching=matching_minority_label1,
-                                    sample_size=2000,
-                                    shap_sample_size="auto",
-                                )
-        X_change_minority_label1 = X_train_minority_label1.copy()
-        X_base_minority_label1 = X_train_majority_label1
-        print('5. 计算出varphi和q')
-        fairness_shapley_minority_value = np.vstack((fairness_shapley_minority_value_label0, fairness_shapley_minority_value_label1))
-        non_zero_count_minority = np.sum(fairness_shapley_minority_value > 0.05)
-        print(f"在X_train_minority中shapely value中大于0.1的值的个数有: {non_zero_count_minority}")
-        q_minority_label0 = DataComposer(
-                        x_counterfactual=X_base_minority_label0.values, 
-                        joint_prob=matching_minority_label0, 
-                        method="max").calculate_q() 
-        q_minority_label1 = DataComposer(
-                        x_counterfactual=X_base_minority_label1.values, 
-                        joint_prob=matching_minority_label1, 
-                        method="max").calculate_q()
-        q_minority = np.vstack((q_minority_label0, q_minority_label1))
+        if self.fairshap_base == 'EO':
+            print(f'This is FairSHAP combined with {self.fairshap_base}, so we only consider the label 1')
+        else:
+           print(f'This is FairSHAP combined with {self.fairshap_base}')
 
-        print('--------接下来对majority group进行修改--------')
-        print('3(a). 将X_train_majority_label0与X_train_minority_label0进行匹配')
-        matching_majority_label0 = NearestNeighborDataMatcher(X_labeled=X_train_majority_label0, X_unlabeled=X_train_minority_label0).match(n_neighbors=1)
-        print('3(b). 将X_train_majority_label1与X_train_minority_label1进行匹配')
-        matching_majority_label1 = NearestNeighborDataMatcher(X_labeled=X_train_majority_label1, X_unlabeled=X_train_minority_label1).match(n_neighbors=1)
 
-        print('4(a). 使用fairshap, 从 X_train_minority_label0中找到合适的值替换X_train_majority_label0中的数据')
-        fairness_shapley_majority_value_label0 = fairness_explainer_original.shap_values(
-                                    X = X_train_majority_label0.values,
-                                    Y = y_train_majority_label0.values,
-                                    X_baseline = X_train_minority_label0.values,
-                                    matching=matching_majority_label0,
-                                    sample_size=2000,
-                                    shap_sample_size="auto",
-                                )
-        X_change_majority_label0 = X_train_majority_label0.copy()
-        X_base_majority_label0 = X_train_minority_label0
-        print('4(b). 使用fairshap, 从 X_train_minority_label1中找到合适的值替换X_train_majority_label1中的数据')
-        fairness_shapley_majority_value_label1 = fairness_explainer_original.shap_values(
-                                    X = X_train_majority_label1.values,
-                                    Y = y_train_majority_label1.values,
-                                    X_baseline = X_train_minority_label1.values,
-                                    matching=matching_majority_label1,
-                                    sample_size=2000,
-                                    shap_sample_size="auto",
-                                )  
-        X_change_majority_label1 = X_train_majority_label1.copy()
-        X_base_majority_label1 = X_train_minority_label1
-            
-        print('5. 计算出varphi和q')
-        # 筛选出shapley value大于0.1的值，其他值设为0，然后归一化
-        fairness_shapley_majority_value = np.vstack((fairness_shapley_majority_value_label0, fairness_shapley_majority_value_label1))
-        non_zero_count_majority =np.sum(fairness_shapley_majority_value > 0.05)
-
-        print(f"在X_train_majority中shapely value中大于0.05的值的个数有: {non_zero_count_majority}")
-        q_majority_label0 = DataComposer(
-                        x_counterfactual=X_base_majority_label0.values, 
-                        joint_prob=matching_majority_label0, 
-                        method="max").calculate_q() 
-        q_majority_label1 = DataComposer(
-                        x_counterfactual=X_base_majority_label1.values, 
-                        joint_prob=matching_majority_label1, 
-                        method="max").calculate_q()
-        q_majority = np.vstack((q_majority_label0, q_majority_label1))
-        fairness_shapley_value = np.vstack((fairness_shapley_minority_value, fairness_shapley_majority_value))
-        # varphi = fix_negative_probabilities_select_larger(fairness_shapley_value)
-        threshold = 0.05
-        if self.fairshap_base == 'DR':
-            varphi = np.where(fairness_shapley_value > threshold, fairness_shapley_value, 0)
-        elif self.fairshap_base == 'DP' or self.fairshap_base == 'EO' or self.fairshap_base == 'PQP':
-           varphi = np.where(fairness_shapley_value > 0.05, fairness_shapley_value, 0)
-           varphi = np.abs(varphi)
-           pass
-        q = np.vstack((q_minority,q_majority))   # q_minority_label0 + q_minority_label1 + q_majority_label0 + q_majority_label1
-        X_change = pd.concat([X_change_minority_label0, X_change_minority_label1, X_change_majority_label0, X_change_majority_label1], axis=0)
-        non_zero_count = non_zero_count_majority + non_zero_count_minority
-
-        print('6. 计算original model在X_test上的accuracy, DR, DP, EO, PP')
+        print('3. 计算original model在X_test上的accuracy, DR, DP, EO, PP, recall, precision, sufficiency')
         y_pred = self.model.predict(self.X_test)
         original_accuracy = accuracy_score(self.y_test, y_pred)
         original_DR = fairness_value_function(sen_att, priv_val, unpriv_dict, self.X_test.values, self.model)
-
         priv_idx = self.X_test[self.sensitive_attri].to_numpy().astype(bool)
         g1_Cm, g0_Cm = marginalised_np_mat(y=self.y_test, y_hat=y_pred, pos_label=1, priv_idx=priv_idx)
         original_DP = grp1_DP(g1_Cm, g0_Cm)[0]
-        original_EO = grp2_EO(g1_Cm, g0_Cm)[0]
+        original_EO, eo_g1, eo_g0 = grp2_EO(g1_Cm, g0_Cm)
         original_PQP = grp3_PQP(g1_Cm, g0_Cm)[0]
-
-        # 计算指标
         original_recall, original_precision, original_sufficiency = calculate_metrics(self.y_test, y_pred, pos=1)
+
+        print('4. 比较eo_g1和eo_g0,然后决定优化的方向')
+        print(f'---EO_g1: {eo_g1}, EO_g2: {eo_g0}')
+        if eo_g1 > eo_g0:
+            print('---EO_g1 > EO_g0, 优化方向为增加EO_g0的TPR: 即使得所有label=1的所有g0的数据点, 尽可能都预测为1') #TPR= TP/(TP+FN)
+            print('---因为现在minority group = g0, majority group = g1, 所以我们只对minority group进行修改')
+            print('5. 将X_train_minority_label1与X_train_majority_label1进行匹配')
+            matching_minority_label1 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label1, X_unlabeled=X_train_majority_label1).match(n_neighbors=1)
+            print('6. 使用FairSHAP, 替换X_train_minority_label1中的数据, 从 X_train_majority_label1中寻找到合适的值')
+            fairness_shapley_minority_value_label1 = fairness_explainer_original.shap_values(
+                                        X = X_train_minority_label1.values,
+                                        Y = y_train_minority_label1.values,
+                                        X_baseline = X_train_majority_label1.values,
+                                        matching=matching_minority_label1,
+                                        sample_size=2000,
+                                        shap_sample_size="auto",
+                                    )
+            X_change_label1 = X_train_minority_label1.copy()
+            y_change_label1 = y_train_minority_label1.copy()
+            X_refer_label1 = X_train_majority_label1
+            y_refer_label1 = y_train_majority_label1
+            print('7. 计算出varphi和q')
+            non_zero_count_minority_label1 = np.sum(fairness_shapley_minority_value_label1 < -0.3 )
+            print(f"---在X_train_minority_label1中shapely value中小于-0.1的值的个数有: {non_zero_count_minority_label1}")
+            non_zero_count = non_zero_count_minority_label1
+            q_label1 = DataComposer( 
+                            x_counterfactual=X_refer_label1.values, 
+                            joint_prob=matching_minority_label1, 
+                            method="max").calculate_q()   # 什么是q?  X_change_label1在X_refer_label1中与之匹配的instances，挑出来组成了q_label1
+            varphi = np.where(fairness_shapley_minority_value_label1 < -0.3, fairness_shapley_minority_value_label1, 0)
+            varphi = np.abs(varphi)
+
+        elif eo_g1 < eo_g0:
+            print('---EO_g1 < EO_g0, 优化方向为增加EO_g1的TPR,即使得所有label=1的所有g1的数据点, 尽可能都预测为1')
+            print('---因为现在minority group = g0, majority group = g1, 所以我们只对majority group进行修改')
+            print('5. 将X_train_majority_label1与X_train_minority_label1进行匹配')
+            matching_majority_label1 = NearestNeighborDataMatcher(X_labeled=X_train_majority_label1, X_unlabeled=X_train_minority_label1).match(n_neighbors=1)
+            print('6. 使用FairSHAP, 替换X_train_majority_label1中的数据, 从 X_train_minority_label1中寻找到合适的值')
+            fairness_shapley_majority_value_label1 = fairness_explainer_original.shap_values(
+                                        X = X_train_majority_label1.values,
+                                        Y = y_train_majority_label1.values,
+                                        X_baseline = X_train_minority_label1.values,
+                                        matching=matching_majority_label1,
+                                        sample_size=2000,
+                                        shap_sample_size="auto",
+                                    )
+            X_change_label1 = X_train_majority_label1.copy()
+            y_change_label1 = y_train_majority_label1.copy()
+            X_refer_label1 = X_train_minority_label1
+            y_refer_label1 = y_train_minority_label1
+            print('7. 计算出varphi和q')
+            non_zero_count_majority_label1 = np.sum(fairness_shapley_majority_value_label1 < -0.3)
+            print(f"---在X_train_majority_label1中shapely value中小于-0.1的值的个数有: {non_zero_count_majority_label1}")
+            non_zero_count = non_zero_count_majority_label1
+            q_label1 = DataComposer( 
+                            x_counterfactual=X_change_label1.values, 
+                            joint_prob=matching_majority_label1, 
+                            method="max").calculate_q()   # 什么是q?  X_change_label1在X_refer_label1中与之匹配的instances，挑出来组成了q_label1
+            varphi = np.where(fairness_shapley_majority_value_label1 < -0.3, fairness_shapley_majority_value_label1, 0)
+            varphi = np.abs(varphi)
+        else:
+            print('---EO_g1 == EO_g0, 无需使用FairSHAP进行优化')
+            return None
+
+
 
         print(f'7. 开始整理minority部分的修改和majority部分的修改并且合并新数据,共修改{non_zero_count}个数据点, 使用new training set训练新模型')
         values_range = np.arange(1, non_zero_count, self.gap)
@@ -223,6 +192,8 @@ class Experiment:
         DR_results = []
         DP_results = []
         EO_results = []
+        EO_G1_results = []
+        EO_G0_results = []
         PQP_results = []
         recall_results = []
         precision_results = []
@@ -237,19 +208,11 @@ class Experiment:
             # Step 3: 挑出前 action_number 个数的位置
             top_positions = flat_varphi_sorted[:action_number]
             
-            # # 有change_group的时候记录结果的
-            # if action_number == non_zero_count-1:  
-            #     for value, row_idx, col_idx in top_positions:
-            #         before_value = self.X_train_majority.iloc[row_idx, col_idx]
-            #         after_value = q[row_idx, col_idx]
-            #         changed_value_info.append((col_idx, before_value, after_value))  # 存储修改的值的信息
-
-            # Step 4: 替换 X 中前三列的值为 S 中对应位置的值
             for value, row_idx, col_idx in top_positions:
-                X_change.iloc[row_idx, col_idx] = q[row_idx, col_idx]
+                X_change_label1.iloc[row_idx, col_idx] = q_label1[row_idx, col_idx]
 
-            x = X_change
-            y = pd.concat([y_train_minority_label0, y_train_minority_label1, y_train_majority_label0, y_train_majority_label1], axis=0)
+            x = pd.concat([X_change_label1, X_refer_label1, X_train_minority_label0, X_train_majority_label0], axis=0)
+            y = pd.concat([y_change_label1, y_refer_label1, y_train_minority_label0, y_train_majority_label0], axis=0)
 
             # Step 6: Train the new model            
             model_new = XGBClassifier()
@@ -262,6 +225,8 @@ class Experiment:
             g1_Cm, g0_Cm = marginalised_np_mat(y_test, y_hat, 1, priv_idx)
             new_DP = grp1_DP(g1_Cm, g0_Cm)[0]
             new_EO = grp2_EO(g1_Cm, g0_Cm)[0]
+            new_eo_g1 = grp2_EO(g1_Cm, g0_Cm)[1]
+            new_eo_g0 = grp2_EO(g1_Cm, g0_Cm)[2]
             new_PQP = grp3_PQP(g1_Cm, g0_Cm)[0]
             new_recall, new_precision, new_sufficiency = calculate_metrics(self.y_test, y_hat, pos=1)
   
@@ -269,17 +234,13 @@ class Experiment:
             DR_results.append(new_DR)
             DP_results.append(new_DP)
             EO_results.append(new_EO)
+            EO_G0_results.append(new_eo_g0)
+            EO_G1_results.append(new_eo_g1)
             PQP_results.append(new_PQP)
             recall_results.append(new_recall)
             precision_results.append(new_precision)
             sufficiency_results.append(new_sufficiency)
 
-
-            # step8: 评估新模型在accuracy上的表现
-            # if after < self.original_Xtest_DR:
-            #     y_new_pred = model_new.predict(self.X_test)
-            #     accuracy_new = accuracy_score(self.y_test, y_new_pred)
-            #     fairness_accuracy_pairs.append((after, accuracy_new, action_number))  # Store both values as a tuple
         
         print('8. 保存结果到csv文件')
         df = pd.DataFrame({
@@ -287,13 +248,16 @@ class Experiment:
             "new_DR": DR_results,
             "new_DP": DP_results,
             "new_EO": EO_results,
+            'new_eo_g1': EO_G1_results,
+            'new_eo_g0': EO_G0_results,
             "new_PQP": PQP_results,
             'new_recall': recall_results,
             'new_precision': precision_results,
             'new_sufficiency': sufficiency_results,
+
         })
         # 在 DataFrame 的第一行添加 original 值
-        df.loc[-1] = ["original", original_DR, original_DP, original_EO, original_PQP, original_recall, original_precision, original_sufficiency]  # 插入到第一行
+        df.loc[-1] = ["original", original_DR, original_DP, original_EO, eo_g1, eo_g0, original_PQP, original_recall, original_precision, original_sufficiency]  # 插入到第一行
         df.index = df.index + 1  # 重新索引
         df = df.sort_index()  # 确保 original 行在最上面
 
@@ -313,7 +277,7 @@ class Experiment:
 
     def _split_into_majority_minority_label0_label1(self):
         '''
-        This function is used to divide the dataset into majority group and minority group
+        This function is used to divide the dataset into sensitive_attribute g0 and g1.                     ----- (dont use 'majority group and minority group' now)
 
         Arg:
         - X: pd.DataFrame, the input data
@@ -326,23 +290,30 @@ class Experiment:
         - X_minority: pd.DataFrame, the minority group data
         - y_minority: pd.Series, the minority group labels
         '''
+
+        print('Now we assume that: g1 is majority group, g0 is minority group')
+
         group_division = self.X_train[self.sensitive_attri].value_counts()
         '''把X_train分成majority和minority两个部分'''
-        if group_division[0] > group_division[1]:  #
-            majority = self.X_train[self.sensitive_attri] == 0
-            X_train_majority = self.X_train[majority]
-            y_train_majority = self.y_train[majority]
-            minority = self.X_train[self.sensitive_attri] == 1
-            X_train_minority = self.X_train[minority]
-            y_train_minority = self.y_train[minority]
+        # if group_division[0] > group_division[1]:  #
+        #     self.majority_group = 0
+        #     self.minority_group = 1
+        #     majority = self.X_train[self.sensitive_attri] == 0
+        #     X_train_majority = self.X_train[majority]
+        #     y_train_majority = self.y_train[majority]
+        #     minority = self.X_train[self.sensitive_attri] == 1
+        #     X_train_minority = self.X_train[minority]
+        #     y_train_minority = self.y_train[minority]
 
-        else:
-            majority = self.X_train[self.sensitive_attri] == 1
-            X_train_majority = self.X_train[majority]
-            y_train_majority = self.y_train[majority]
-            minority = self.X_train[self.sensitive_attri] == 0
-            X_train_minority = self.X_train[minority]
-            y_train_minority = self.y_train[minority]
+        # else:
+        #     self.majority_group = 1
+        #     self.minority_group = 0
+        majority = self.X_train[self.sensitive_attri] == 1
+        X_train_majority = self.X_train[majority]
+        y_train_majority = self.y_train[majority]
+        minority = self.X_train[self.sensitive_attri] == 0
+        X_train_minority = self.X_train[minority]
+        y_train_minority = self.y_train[minority]
 
         y_train_majority_label1 = y_train_majority[y_train_majority == 1]
         y_train_majority_label0 = y_train_majority[y_train_majority == 0]
