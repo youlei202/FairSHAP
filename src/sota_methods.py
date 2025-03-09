@@ -16,7 +16,7 @@ from fairness_measures import marginalised_np_mat, grp1_DP, grp2_EO, grp3_PQP
 import os
 
 
-class SOTAPreprocessingMethods:
+class BenchMarkPreprocessingMethods:
     def __init__(self,
                 # dataset_name: str,  # 'german_Credit', 'compas', 'compas4race', 'adult', 'default_credit', 'census_income_kdd'
                 sota_method: str,  # 'disparate_impact', 'correlation_removal', 'reweight', 'fairUS', 'optimized_preprocessing'
@@ -43,7 +43,7 @@ class SOTAPreprocessingMethods:
         #     self.gap = 1
         # else :
         #     raise ValueError('The dataset name is not supported')
-    def run_and_save_results(self):
+    def run_and_save_results(self, save_origin=True):
         '''
         Run the chosn SOTA method on all datasets and save the results in a csv file
         '''
@@ -95,16 +95,18 @@ class SOTAPreprocessingMethods:
                 X_train, y_train = train_data.drop(self.target_name, axis=1), train_data[self.target_name]
                 X_val, y_val = val_data.drop(self.target_name, axis=1), val_data[self.target_name]
                 # Baseline model
-                model = XGBClassifier()
-                model.fit(X_train, y_train)
+
                 self.sen_att = [X_train.columns.get_loc(name) for name in [self.sen_att_name]]
                 self.sen_att_index = X_train.columns.get_loc(self.sen_att_name)
-                accuracy, dr, dp, eo, pqp = self._run_evaluation_pd(model, X_val, y_val)
-                original_accuracy.append(accuracy)
-                original_dr.append(dr)
-                original_dp.append(dp)
-                original_eo.append(eo)
-                original_pqp.append(pqp)
+                if save_origin:
+                    model = XGBClassifier()
+                    model.fit(X_train, y_train)
+                    accuracy, dr, dp, eo, pqp = self._run_evaluation_pd(model, X_val, y_val)
+                    original_accuracy.append(accuracy)
+                    original_dr.append(dr)
+                    original_dp.append(dp)
+                    original_eo.append(eo)
+                    original_pqp.append(pqp)
 
                 # Mitigate bias
                 if self.sota_method == 'disparate_impact':
@@ -121,7 +123,17 @@ class SOTAPreprocessingMethods:
                     processed_pqp.append(pqp)
 
                 elif self.sota_method == 'correlation_removal':
-                    self.correlation_removal(X_train, y_train, X_val, y_val)
+                    X_train_repair = self._correlation_removal(X_train, remove_ratio=1)
+                    X_val_repair = self._correlation_removal(X_val, remove_ratio=1)
+                    model = XGBClassifier()
+                    model.fit(X_train_repair, y_train)
+                    accuracy, dr, dp, eo, pqp = self._run_evaluation_np(model, X_val_repair, y_val)
+                    processed_accuracy.append(accuracy)
+                    processed_dr.append(dr)
+                    processed_dp.append(dp)
+                    processed_eo.append(eo)
+                    processed_pqp.append(pqp)
+                    
                 elif self.sota_method == 'reweight':
                     self.reweight(X_train, y_train, X_val, y_val)
                 elif self.sota_method == 'fairUS':
@@ -131,28 +143,29 @@ class SOTAPreprocessingMethods:
                 else:
                     raise ValueError('The SOTA method is not supported')
 
-            # 确保保存目录存在
+        
             save_dir = "saved_results/sota_results"
             os.makedirs(save_dir, exist_ok=True)  # 自动创建目录（如果不存在）
+            
+            if save_origin:
+                # Save ORIGINAL results of current dataset in a csv file  
+                original_stats = {
+                    'original_accuracy': f"{np.mean(original_accuracy):.4f} ± {np.std(original_accuracy):.4f}",
+                    'original_dr': f"{np.mean(original_dr):.4f} ± {np.std(original_dr):.4f}",
+                    'original_dp': f"{np.mean(original_dp):.4f} ± {np.std(original_dp):.4f}",
+                    'original_eo': f"{np.mean(original_eo):.4f} ± {np.std(original_eo):.4f}",
+                    'original_pqp': f"{np.mean(original_pqp):.4f} ± {np.std(original_pqp):.4f}",
+                }
+                original_results = pd.DataFrame(original_stats, index=[self.dataset_name]).T
 
-            # Save ORIGINAL results of current dataset in a csv file  
-            original_stats = {
-                'original_accuracy': f"{np.mean(original_accuracy):.4f} ± {np.std(original_accuracy):.4f}",
-                'original_dr': f"{np.mean(original_dr):.4f} ± {np.std(original_dr):.4f}",
-                'original_dp': f"{np.mean(original_dp):.4f} ± {np.std(original_dp):.4f}",
-                'original_eo': f"{np.mean(original_eo):.4f} ± {np.std(original_eo):.4f}",
-                'original_pqp': f"{np.mean(original_pqp):.4f} ± {np.std(original_pqp):.4f}",
-            }
-            original_results = pd.DataFrame(original_stats, index=[self.dataset_name]).T
-
-            csv_file = os.path.join(save_dir, "original_results.csv")  # 存储路径
-            if os.path.exists(csv_file):
-                existing_df = pd.read_csv(csv_file, index_col=0)
-                existing_df[self.dataset_name] = original_results[self.dataset_name]
-                existing_df.to_csv(csv_file)
-            else:
-                original_results.to_csv(csv_file)
-            print(f"✅ {self.dataset_name} 原始结果已保存到 {csv_file}")
+                csv_file = os.path.join(save_dir, "original_results.csv")  # 存储路径
+                if os.path.exists(csv_file):
+                    existing_df = pd.read_csv(csv_file, index_col=0)
+                    existing_df[self.dataset_name] = original_results[self.dataset_name]
+                    existing_df.to_csv(csv_file)
+                else:
+                    original_results.to_csv(csv_file)
+                print(f"✅ {self.dataset_name} 原始结果已保存到 {csv_file}")
 
             # Save PROCESSED results of current dataset in a csv file
             processed_stats = {
@@ -189,6 +202,16 @@ class SOTAPreprocessingMethods:
 
         repaired_features[:, index] = X.values[:, index]
         return repaired_features
+    
+    def _correlation_removal(self, X:pd.DataFrame, remove_ratio=1):
+        cr = CorrelationRemover(sensitive_feature_ids=[self.sen_att_name], alpha=remove_ratio)
+        cr.fit(X)
+        # CorrelationRemover(sensitive_feature_ids=sensitive_feature)
+        X_transform_without_sen_att = cr.transform(X)
+        sensitive_column = X['sex'].copy()
+        X_transform_with_sensitive = np.insert(X_transform_without_sen_att, 0, sensitive_column, axis=1)
+        return X_transform_with_sensitive
+
 
     def _run_evaluation_pd(self, model, X_val:pd.DataFrame, y_val:pd.Series):
         sen_att_name = [self.sen_att_name]
