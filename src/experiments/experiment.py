@@ -79,7 +79,7 @@ class Experiment:
             raise ValueError('The dataset name is not supported')      
 
 
-    def run(self, ith_fold: int):
+    def run(self, ith_fold: int, threshold: float = 0.1):
         self.ith_fold = ith_fold
         print(f"1. Split the {self.dataset_name} dataset into majority group and minority group according to the number of sensitive attribute, besides split by label 0 and label 1")
         X_train_majority_label0, y_train_majority_label0, X_train_majority_label1, y_train_majority_label1, X_train_minority_label0, y_train_minority_label0, X_train_minority_label1, y_train_minority_label1 = self._split_into_majority_minority_label0_label1()
@@ -132,8 +132,8 @@ class Experiment:
         X_base_minority_label1 = X_train_majority_label1
         print('5. 计算出varphi和q')
         fairness_shapley_minority_value = np.vstack((fairness_shapley_minority_value_label0, fairness_shapley_minority_value_label1))
-        non_zero_count_minority = np.sum(fairness_shapley_minority_value > 0.05)
-        print(f"在X_train_minority中shapely value中大于0.1的值的个数有: {non_zero_count_minority}")
+        non_zero_count_minority = np.sum(fairness_shapley_minority_value > threshold)
+        print(f"在X_train_minority中shapely value中大于{threshold}的值的个数有: {non_zero_count_minority}")
         q_minority_label0 = DataComposer(
                         x_counterfactual=X_base_minority_label0.values, 
                         joint_prob=matching_minority_label0, 
@@ -176,9 +176,9 @@ class Experiment:
         print('5. 计算出varphi和q')
         # 筛选出shapley value大于0.1的值，其他值设为0，然后归一化
         fairness_shapley_majority_value = np.vstack((fairness_shapley_majority_value_label0, fairness_shapley_majority_value_label1))
-        non_zero_count_majority =np.sum(fairness_shapley_majority_value > 0.05)
+        non_zero_count_majority =np.sum(fairness_shapley_majority_value > threshold)
 
-        print(f"在X_train_majority中shapely value中大于0.05的值的个数有: {non_zero_count_majority}")
+        print(f"在X_train_majority中shapely value中大于{threshold}的值的个数有: {non_zero_count_majority}")
         q_majority_label0 = DataComposer(
                         x_counterfactual=X_base_majority_label0.values, 
                         joint_prob=matching_majority_label0, 
@@ -190,11 +190,11 @@ class Experiment:
         q_majority = np.vstack((q_majority_label0, q_majority_label1))
         fairness_shapley_value = np.vstack((fairness_shapley_minority_value, fairness_shapley_majority_value))
         # varphi = fix_negative_probabilities_select_larger(fairness_shapley_value)
-        threshold = 0.05
+
         if self.fairshap_base == 'DR':
             varphi = np.where(fairness_shapley_value > threshold, fairness_shapley_value, 0)
         elif self.fairshap_base == 'DP' or self.fairshap_base == 'EO' or self.fairshap_base == 'PQP':
-           varphi = np.where(fairness_shapley_value > 0.05, fairness_shapley_value, 0)
+           varphi = np.where(fairness_shapley_value > threshold, fairness_shapley_value, 0)
            varphi = np.abs(varphi)
            pass
         q = np.vstack((q_minority,q_majority))   # q_minority_label0 + q_minority_label1 + q_majority_label0 + q_majority_label1
@@ -213,20 +213,21 @@ class Experiment:
         original_PQP = grp3_PQP(g1_Cm, g0_Cm)[0]
 
         # 计算指标
-        original_recall, original_precision, original_sufficiency = calculate_metrics(self.y_test, y_pred, pos=1)
+        # original_recall, original_precision, original_sufficiency = calculate_metrics(self.y_test, y_pred, pos=1)
 
         print(f'7. 开始整理minority部分的修改和majority部分的修改并且合并新数据,共修改{non_zero_count}个数据点, 使用new training set训练新模型')
         values_range = np.arange(1, non_zero_count, self.gap)
-        result_fairness_measures = {'DP':[], 'EO':[], 'PQP':[], 'DR':[]}
-        result_accuracy = {'DP':[], 'EO':[], 'PQP':[], 'DR':[]}
+        # result_fairness_measures = {'DP':[], 'EO':[], 'PQP':[], 'DR':[]}
+        # result_accuracy = {'DP':[], 'EO':[], 'PQP':[], 'DR':[]}
 
+        accuracy_results = []
         DR_results = []
         DP_results = []
         EO_results = []
         PQP_results = []
-        recall_results = []
-        precision_results = []
-        sufficiency_results = []
+        # recall_results = []
+        # precision_results = []
+        # sufficiency_results = []
 
         for action_number in values_range:
             # Step 1: 将 varphi 的值和位置展开为一维
@@ -259,21 +260,21 @@ class Experiment:
             new_DR = fairness_value_function(sen_att, priv_val, unpriv_dict, self.X_test.values, model_new)
             y_hat = model_new.predict(self.X_test)
             y_test = self.y_test
+            new_accuracy = accuracy_score(self.y_test, y_hat)
             g1_Cm, g0_Cm = marginalised_np_mat(y_test, y_hat, 1, priv_idx)
             new_DP = grp1_DP(g1_Cm, g0_Cm)[0]
             new_EO = grp2_EO(g1_Cm, g0_Cm)[0]
             new_PQP = grp3_PQP(g1_Cm, g0_Cm)[0]
-            new_recall, new_precision, new_sufficiency = calculate_metrics(self.y_test, y_hat, pos=1)
-  
+            # new_recall, new_precision, new_sufficiency = calculate_metrics(self.y_test, y_hat, pos=1)
 
+            accuracy_results.append(new_accuracy)
             DR_results.append(new_DR)
             DP_results.append(new_DP)
             EO_results.append(new_EO)
             PQP_results.append(new_PQP)
-            recall_results.append(new_recall)
-            precision_results.append(new_precision)
-            sufficiency_results.append(new_sufficiency)
-
+            # recall_results.append(new_recall)
+            # precision_results.append(new_precision)
+            # sufficiency_results.append(new_sufficiency)
 
             # step8: 评估新模型在accuracy上的表现
             # if after < self.original_Xtest_DR:
@@ -284,16 +285,19 @@ class Experiment:
         print('8. 保存结果到csv文件')
         df = pd.DataFrame({
             "action_number": values_range,  # 直接使用 values_range
+            "new_accuracy": accuracy_results,
             "new_DR": DR_results,
             "new_DP": DP_results,
             "new_EO": EO_results,
             "new_PQP": PQP_results,
-            'new_recall': recall_results,
-            'new_precision': precision_results,
-            'new_sufficiency': sufficiency_results,
+            # 'new_recall': recall_results,
+            # 'new_precision': precision_results,
+            # 'new_sufficiency': sufficiency_results,
+
         })
         # 在 DataFrame 的第一行添加 original 值
-        df.loc[-1] = ["original", original_DR, original_DP, original_EO, original_PQP, original_recall, original_precision, original_sufficiency]  # 插入到第一行
+        # df.loc[-1] = ["original", original_DR, original_DP, original_EO, original_PQP, original_recall, original_precision, original_sufficiency]  # 插入到第一行
+        df.loc[-1] = ["original", original_accuracy, original_DR, original_DP, original_EO, original_PQP]  # 插入到第一行
         df.index = df.index + 1  # 重新索引
         df = df.sort_index()  # 确保 original 行在最上面
 

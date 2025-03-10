@@ -4,87 +4,62 @@ import matplotlib.pyplot as plt
 
 def plot_fairness_improvement(
     folds,
-    original_DR,      # 与 folds 对应的原始 DR 值列表
-    original_DP,      # 与 folds 对应的原始 DP 值列表
-    original_EO,      # 与 folds 对应的原始 EO 值列表
-    original_PQP,     # 与 folds 对应的原始 PQP 值列表
+    original_accuracy,  # 新增 Accuracy 变量
+    original_DR,      
+    original_DP,      
+    original_EO,      
+    original_PQP,     
     stop_when_no_data=3,
     min_action=1,
     baseline=0.0,
-    figsize=(10, 6),
+    figsize=(12, 10),  # 调整高度，避免 3×2 布局显得太拥挤
     fill_alpha=0.2,
     fill_color='b'
 ):
     """
-    绘制 2×2 子图，分别展示 DR、DP、EO、PQP 这四种 fairness 指标的
-    “相对于原始指标值 (original) 的差值”随 action_number 变化的均值±标准差曲线。
-    
-    每张子图的具体做法：
-      1) 将每个 fold 中的 new_XXX 列减去对应的 original_XXX，以得到差值。
-      2) 从 action=1 遍历到最大 action_number，当有 stop_when_no_data 个 fold 没数据时停止。
-      3) 对剩下有数据的 fold 进行均值和标准差计算并画图。
-      4) 在 y=baseline 处添加一条参考线。
+    绘制 3×2 子图，分别展示 Accuracy、DR、DP、EO、PQP 指标的
+    “相对于原始指标值的改善差值”随 action_number 变化的均值±标准差曲线。
 
     参数：
     --------
     1) folds : list of pd.DataFrame
-       - 每个 DataFrame 必须包含下列列：'action_number', 'new_DR', 'new_DP', 'new_EO', 'new_PQP'
-         例如：fold1, fold2, fold3, fold4, ...
+       - 每个 DataFrame 必须包含：
+         'action_number', 'new_accuracy', 'new_DR', 'new_DP', 'new_EO', 'new_PQP'
     
-    2) original_DR, original_DP, original_EO, original_PQP : list of float
-       - 分别对应 DR、DP、EO、PQP 的原始值列表，每个列表长度应与 folds 相同。
-       - 如：original_DR = [fold1_original_DR, fold2_original_DR, fold3_original_DR, ...]
+    2) original_accuracy, original_DR, original_DP, original_EO, original_PQP : list of float
+       - 长度需与 `folds` 相同。
 
-    3) stop_when_no_data : int, 默认=3
-       - 当遍历 action_number 时，如果有 >= stop_when_no_data 个 fold 没数据，就停止遍历。
-
-    4) min_action : int, 默认=1
-       - 从哪个 action_number 开始遍历。
-
-    5) baseline : float, 默认=0.0
-       - 在图中绘制一条 y=baseline 的水平线，便于参考。
-
-    6) figsize : tuple, 默认=(10, 6)
-       - 整个图表的大小，会被分成 2×2 四个子图。
-
-    7) fill_alpha : float, 默认=0.2
-       - 均值曲线上下方“±标准差”区域的透明度。
-
-    8) fill_color : str, 默认='b'
-       - 均值线和填充区域的颜色。
-
-    返回：
-    --------
-    None
+    其余参数与之前相同...
     """
 
     # ============== 1) 输入检查 ==============
-    # 确保 folds 的数量与各 original_xxx 列表长度一致
     num_folds = len(folds)
-    if not (len(original_DR) == len(original_DP) == len(original_EO) == len(original_PQP) == num_folds):
-        raise ValueError("original_DR, original_DP, original_EO, original_PQP 的长度都必须与 folds 相同。")
+    if not (len(original_accuracy) == len(original_DR) == len(original_DP) == len(original_EO) == len(original_PQP) == num_folds):
+        raise ValueError("original_accuracy, original_DR, original_DP, original_EO, original_PQP 长度必须与 folds 相同。")
 
-    # 我们需要绘制的四个指标信息打包在一起，以便循环
+    # 需要绘制的 5 个指标
     measures_info = [
+        ("Accuracy", "new_accuracy", original_accuracy),
         ("DR",  "new_DR",  original_DR),
         ("DP",  "new_DP",  original_DP),
         ("EO",  "new_EO",  original_EO),
         ("PQP", "new_PQP", original_PQP),
     ]
 
-    # ============== 2) 准备图形：2×2 子图 ==============
+    num_subplots = len(measures_info)  # 计算子图数量
+    num_rows = (num_subplots + 1) // 2  # 计算行数，确保合理排版
+    
     fig = plt.figure(figsize=figsize)
 
-    # 遍历四个指标，每个指标做一张子图
+    # 遍历 5 个指标，每个指标绘制 1 张子图
     for i, (measure_name, measure_col, original_list) in enumerate(measures_info, start=1):
         
-        # 2.1) 把 action_number 转成数值，并把 new_XXX 减去原始值
+        # 2.1) 计算 `new_XXX - original_XXX`
         for df, orig_val in zip(folds, original_list):
             df['action_number'] = pd.to_numeric(df['action_number'], errors='coerce')
-            # 做差值： new_XXX -= original_XXX
             df[measure_col] = df[measure_col] - orig_val
 
-        # 2.2) 找到所有 fold 中最大的 action_number，用于确定遍历上限
+        # 2.2) 找到所有 fold 中最大的 action_number
         max_actions = []
         for df in folds:
             if not df.empty:
@@ -97,7 +72,7 @@ def plot_fairness_improvement(
             continue
         overall_max_action = int(np.nanmax(max_actions))
 
-        # 2.3) 收集各 action_number 对应的差值
+        # 2.3) 收集各 action_number 的改善值
         measure_values = {}
         for action in range(min_action, overall_max_action + 1):
             current_list = []
@@ -108,16 +83,13 @@ def plot_fairness_improvement(
                 if row.empty:
                     count_no_data += 1
                 else:
-                    # 如果出现多行，就取第一行
                     current_list.append(row.values[0])
             
             if count_no_data >= stop_when_no_data:
-                # 当有太多 fold 没数据时，就停止
                 break
             
             measure_values[action] = current_list
 
-        # 如果收集不到任何 action_number，就跳过
         action_range = sorted(measure_values.keys())
         if len(action_range) == 0:
             print(f"警告：{measure_name} 未找到满足 stop_when_no_data 的有效 action_number，跳过该子图。")
@@ -134,18 +106,17 @@ def plot_fairness_improvement(
         means = np.array(means)
         stds = np.array(stds)
 
-        # ============== 3) 在子图中绘图 ==============
-        ax = fig.add_subplot(2, 2, i)  # 2 行 2 列，第 i 个子图
-        ax.set_title(f"{measure_name} Difference from Original")
+        # ============== 3) 绘图 ==============
+        ax = fig.add_subplot(num_rows, 2, i)  # 3×2 布局，第 i 个子图
+        ax.set_title(f"{measure_name} Improvement from Original")
 
         # 3.1) baseline 参考线
-        ax.axhline(y=baseline, color='black', linewidth=2, linestyle='-', 
-                   label=f'Baseline (y={baseline})')
+        ax.axhline(y=baseline, color='black', linewidth=2, linestyle='-', label=f'Baseline (y={baseline})')
 
-        # 3.2) 均值线
+        # 3.2) 均值曲线
         ax.plot(action_range, means, color=fill_color, label=f'Mean {measure_name} Gap')
 
-        # 3.3) 均值±标准差区域
+        # 3.3) 均值 ± 标准差
         ax.fill_between(
             action_range,
             means - stds,
@@ -160,6 +131,6 @@ def plot_fairness_improvement(
         ax.grid(True)
         ax.legend()
 
-    # 调整子图之间的布局
+    # 调整子图之间的间距
     plt.tight_layout()
     plt.show()

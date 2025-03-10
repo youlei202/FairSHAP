@@ -4,68 +4,49 @@ import matplotlib.pyplot as plt
 
 def plot_results(
     folds,
+    original_accuracy,  # 新增 accuracy 变量
     original_DR, 
     original_DP, 
     original_EO, 
     original_PQP,
     stop_when_no_data=3,
     min_action=1,
-    figsize=(12, 8),
+    figsize=(12, 10),  # 调整高度，避免 3×2 布局显得太拥挤
     fill_alpha=0.2,
     fill_color='b',
     red_alpha=0.3
 ):
     """
-    一次性绘制 DR / DP / EO / PQP 的 2×2 子图，展示各项指标在不同 action_number 下的
+    一次性绘制 Accuracy / DR / DP / EO / PQP 的 3×2 子图，展示各项指标在不同 action_number 下的
     均值与标准差，并在图中用淡红色虚线标出 5 个原始数值。
 
     参数说明：
     --------
     1) folds : list of pd.DataFrame
        - 每个 DataFrame 必须含有下列列：
-         'action_number', 'new_DR', 'new_DP', 'new_EO', 'new_PQP'.
+         'action_number', 'new_accuracy', 'new_DR', 'new_DP', 'new_EO', 'new_PQP'.
        - 示例：fold1, fold2, fold3, fold4, ...
 
-    2) original_DR, original_DP, original_EO, original_PQP : list of float
-       - 各长度为 5（如果你有 5 个 original value），分别对应 DR, DP, EO, PQP 指标的原始值。
-       - 例如 original_DR = [dr1, dr2, dr3, dr4, dr5]（这 5 个值分别是哪几个 fold 的或其它含义，
-         取决于你的场景），会在 DR 的子图中画出 5 条淡红色虚线。
+    2) original_accuracy : list of float
+       - 长度为 5，表示 Accuracy 原始值。
 
-    3) stop_when_no_data : int, 默认=3
-       - 当遍历 action_number 时，如果有 >= stop_when_no_data 个 fold 没有该 action_number 的数据，就停止。
+    3) original_DR, original_DP, original_EO, original_PQP : list of float
+       - 长度为 5，分别对应 DR, DP, EO, PQP 指标的原始值。
 
-    4) min_action : int, 默认=1
-       - 从 action_number = min_action 开始遍历，一直到无效或停止条件达成为止。
-
-    5) figsize : tuple, 默认=(12, 8)
-       - 整个图形的大小，会包含 4 个子图 (2×2)。
-
-    6) fill_alpha : float, 默认=0.2
-       - 均值曲线上下方“±1 标准差”区域的透明度。
-
-    7) fill_color : str, 默认='b'
-       - 均值曲线以及填充区域的颜色。
-
-    8) red_alpha : float, 默认=0.3
-       - 红色虚线的透明度 (0~1 之间)，用于在子图中以淡淡的红色显示原始值。
-
-    返回：
-    --------
-    None
+    其余参数与之前相同...
     """
-    # 首先检查 folds 与 4 个 original_xxx 列表的长度是否匹配你的需求
-    # 如果你真的只有 4~5 个 folds，却有 5 个 original 值，这里按场景自定义检查
-    # 不过你说“针对每个指标有 5 个 original value”，那就不检查 folds 长度了
-
-    # 将要绘制的 4 个指标的信息打包在一起，以方便循环
+    # 更新需要绘制的指标
     measures_info = [
+        ("Accuracy", "new_accuracy", original_accuracy),
         ("DR",  "new_DR",  original_DR),
         ("DP",  "new_DP",  original_DP),
         ("EO",  "new_EO",  original_EO),
         ("PQP", "new_PQP", original_PQP),
     ]
 
-    # 准备子图
+    num_subplots = len(measures_info)  # 计算有多少个子图
+    num_rows = (num_subplots + 1) // 2  # 计算行数（保证 2 列排布）
+    
     plt.figure(figsize=figsize)
 
     for i, (measure_name, measure_col, orig_list) in enumerate(measures_info, start=1):
@@ -124,13 +105,12 @@ def plot_results(
         stds = np.array(stds)
 
         # ---- 4) 在子图上绘制 ----
-        ax = plt.subplot(2, 2, i)  # 2 行 2 列，第 i 个子图
+        ax = plt.subplot(num_rows, 2, i)  # 3 行 2 列，第 i 个子图
         ax.set_title(f"{measure_name} vs. Action Number")
 
         # 4.1) 在子图中用淡红色虚线绘制 orig_list 中的每个值
         for idx, val in enumerate(orig_list):
-            # 只给第一条线加上 label，避免图例重复
-            label = "Original Values" if idx == 0 else None
+            label = "Original Values" if idx == 0 else None  # 只给第一条线加上 label，避免图例重复
             ax.axhline(
                 y=val,
                 color='red',

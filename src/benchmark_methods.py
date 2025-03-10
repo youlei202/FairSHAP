@@ -152,12 +152,12 @@ class BenchMarkPreprocessingMethods:
                     processed_dp.append(dp)
                     processed_eo.append(eo)
                     processed_pqp.append(pqp)
-                    
+                elif self.sota_method == 'optimized_preprocessing':
+                    self.optimized_preprocessing(X_train, y_train, X_val, y_val)                 
 
                 elif self.sota_method == 'fairUS':
                     self.fairUS(X_train, y_train, X_val, y_val)
-                elif self.sota_method == 'optimized_preprocessing':
-                    self.optimized_preprocessing(X_train, y_train, X_val, y_val)
+
                 else:
                     raise ValueError('The SOTA method is not supported')
 

@@ -24,7 +24,7 @@ def evaluate_model(model, X_train:pd.DataFrame, y_train:pd.Series, num_folds, da
         # 评估模型（这里假设用准确率评估）
         if fairshap_base == 'DR' or fairshap_base == 'DP':
             experiment = Experiment(model=model, X_train=X_train_fold, y_train=y_train_fold, X_test=X_val_fold, y_test=y_val_fold, dataset_name=dataset_name, fairshap_base=fairshap_base)
-            experiment.run(ith_fold=i)
+            experiment.run(ith_fold=i, threshold=0.1)
         elif fairshap_base == 'EO':
             experiment = ExperimentNewEO(model=model, X_train=X_train_fold, y_train=y_train_fold, X_test=X_val_fold, y_test=y_val_fold, dataset_name=dataset_name, fairshap_base=fairshap_base)
             experiment.run(ith_fold=i)
