@@ -14,7 +14,7 @@ from src.matching.nn_matcher import NearestNeighborDataMatcher
 from src.attribution import FairnessExplainer
 from src.composition.data_composer import DataComposer
 from src.attribution.oracle_metric import perturb_numpy_ver
-from fairness_measures import marginalised_np_mat, grp1_DP, grp2_EO, grp3_PQP
+from fairness_related.fairness_measures import marginalised_np_mat, grp1_DP, grp2_EO, grp3_PQP
 
 
 EPSILON = 1e-20

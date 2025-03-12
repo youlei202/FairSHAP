@@ -1,7 +1,5 @@
 # coding: utf-8
-
 import numpy as np
-
 
 def contingency_tab_bi(y, y_hat, pos=1):
   # For one single classifier

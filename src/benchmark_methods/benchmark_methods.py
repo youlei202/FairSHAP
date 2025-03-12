@@ -15,7 +15,7 @@ from aif360.algorithms.preprocessing import OptimPreproc
 from src.attribution import FairnessExplainer
 from src.data.unified_dataloader import load_dataset
 from src.attribution.oracle_metric import perturb_numpy_ver
-from fairness_measures import marginalised_np_mat, grp1_DP, grp2_EO, grp3_PQP
+from fairness_related.fairness_measures import marginalised_np_mat, grp1_DP, grp2_EO, grp3_PQP
 import os
 
 
