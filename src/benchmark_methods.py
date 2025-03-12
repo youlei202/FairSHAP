@@ -95,7 +95,7 @@ class BenchMarkPreprocessingMethods:
             processed_dp = []
             processed_eo = []
             processed_pqp = []
-
+            modification_num = []
             for j, (train_index, val_index) in enumerate(kf.split(processed_data)):
                 print("-------------------------------------")
                 print(f"-------------{j}th fold----------------")
@@ -124,34 +124,41 @@ class BenchMarkPreprocessingMethods:
                     model.fit(X_train_repair, y_train)
                     
                     accuracy, dr, dp, eo, pqp = self._run_evaluation_np(model, X_val_repair, y_val)
+                    diff_count = np.sum(X_train.values != X_train_repair)
                     processed_accuracy.append(accuracy)
                     processed_dr.append(dr)
                     processed_dp.append(dp)
                     processed_eo.append(eo)
                     processed_pqp.append(pqp)
-
+                    modification_num.append(diff_count)
+                    print(f"diff_count: {diff_count}")
                 elif self.sota_method == 'correlation_removal':
                     X_train_repair = self._correlation_removal(X_train, remove_ratio=1)
                     X_val_repair = self._correlation_removal(X_val, remove_ratio=1)
                     model = XGBClassifier()
                     model.fit(X_train_repair, y_train)
                     accuracy, dr, dp, eo, pqp = self._run_evaluation_np(model, X_val_repair, y_val)
+                    diff_count = np.sum(X_train.values != X_train_repair)
                     processed_accuracy.append(accuracy)
                     processed_dr.append(dr)
                     processed_dp.append(dp)
                     processed_eo.append(eo)
                     processed_pqp.append(pqp)
-                    
+                    modification_num.append(diff_count)
+                    print(f"diff_count: {diff_count}")
                 elif self.sota_method == 'reweighing':
                     model = XGBClassifier()
                     instance_weights = self._reweighing(X_train, y_train)
                     model.fit(X_train, y_train, sample_weight=instance_weights)
                     accuracy, dr, dp, eo, pqp = self._run_evaluation_pd(model, X_val, y_val)
+                    diff_count = 0
                     processed_accuracy.append(accuracy)
                     processed_dr.append(dr)
                     processed_dp.append(dp)
                     processed_eo.append(eo)
                     processed_pqp.append(pqp)
+                    modification_num.append(diff_count)
+                    print(f"diff_count: {diff_count}")
                 elif self.sota_method == 'optimized_preprocessing':
                     self.optimized_preprocessing(X_train, y_train, X_val, y_val)                 
 
@@ -192,6 +199,7 @@ class BenchMarkPreprocessingMethods:
                 'processed_dp': f"{np.mean(processed_dp):.4f} ± {np.std(processed_dp):.4f}",
                 'processed_eo': f"{np.mean(processed_eo):.4f} ± {np.std(processed_eo):.4f}",
                 'processed_pqp': f"{np.mean(processed_pqp):.4f} ± {np.std(processed_pqp):.4f}",
+                'modification_num': f"{np.mean(modification_num):.4f} ± {np.std(modification_num):.4f}",
             }
             processed_results = pd.DataFrame(processed_stats, index=[self.dataset_name]).T
 

@@ -47,6 +47,7 @@ class Experiment:
                  y_test: pd.Series,
                  dataset_name: str,
                  fairshap_base: str = 'DR',   # 'DR', 'DR+precision', 'DR+recall', 'DR+sufficiency'
+                 matching_method: str = 'NN',  # 'NN', 'OT'
                  ):
         self.model = model
         self.X_train = X_train
@@ -56,6 +57,7 @@ class Experiment:
         self.dataset_name = dataset_name
     
         self.fairshap_base = fairshap_base  # combine FairSHAP with DR
+        self.matching_method = matching_method  # 'NN', 'OT'
 
         if self.dataset_name == 'german_credit':
             self.sensitive_attri = 'sex'
@@ -105,9 +107,15 @@ class Experiment:
         
         print('--------接下来先对minority group进行修改--------')
         print('3(a). 将X_train_minority_label0与X_train_majority_label0进行匹配')
-        matching_minority_label0 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label0, X_unlabeled=X_train_majority_label0).match(n_neighbors=1)
         print('3(b). 将X_train_minority_label1与X_train_majority_label1进行匹配')
-        matching_minority_label1 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label1, X_unlabeled=X_train_majority_label1).match(n_neighbors=1)
+        if self.matching_method == 'NN':
+            matching_minority_label0 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label0, X_unlabeled=X_train_majority_label0).match(n_neighbors=1)
+            matching_minority_label1 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label1, X_unlabeled=X_train_majority_label1).match(n_neighbors=1)
+        elif self.matching_method == 'OT':
+            matching_minority_label0 = OptimalTransportPolicy(X_labeled=X_train_minority_label0.values, X_unlabeled=X_train_majority_label0.values).match()
+            matching_minority_label1 = OptimalTransportPolicy(X_labeled=X_train_minority_label1.values, X_unlabeled=X_train_majority_label1.values).match()
+        else:
+            raise ValueError('The matching method is not supported')
         print('4(a). 使用FairSHAP, 从 X_train_majority_label0中找到合适的值替换X_train_minority_label0中的数据')
         fairness_shapley_minority_value_label0 = fairness_explainer_original.shap_values(
                                     X = X_train_minority_label0.values,
@@ -146,9 +154,15 @@ class Experiment:
 
         print('--------接下来对majority group进行修改--------')
         print('3(a). 将X_train_majority_label0与X_train_minority_label0进行匹配')
-        matching_majority_label0 = NearestNeighborDataMatcher(X_labeled=X_train_majority_label0, X_unlabeled=X_train_minority_label0).match(n_neighbors=1)
         print('3(b). 将X_train_majority_label1与X_train_minority_label1进行匹配')
-        matching_majority_label1 = NearestNeighborDataMatcher(X_labeled=X_train_majority_label1, X_unlabeled=X_train_minority_label1).match(n_neighbors=1)
+        if self.matching_method == 'NN':
+            matching_majority_label0 = NearestNeighborDataMatcher(X_labeled=X_train_majority_label0, X_unlabeled=X_train_minority_label0).match(n_neighbors=1)       
+            matching_majority_label1 = NearestNeighborDataMatcher(X_labeled=X_train_majority_label1, X_unlabeled=X_train_minority_label1).match(n_neighbors=1)
+        elif self.matching_method == 'OT':
+            matching_majority_label0 = OptimalTransportPolicy(X_labeled=X_train_majority_label0.values, X_unlabeled=X_train_minority_label0.values).match()
+            matching_majority_label1 = OptimalTransportPolicy(X_labeled=X_train_majority_label1.values, X_unlabeled=X_train_minority_label1.values).match()
+        else:
+            raise ValueError('The matching method is not supported')
 
         print('4(a). 使用fairshap, 从 X_train_minority_label0中找到合适的值替换X_train_majority_label0中的数据')
         fairness_shapley_majority_value_label0 = fairness_explainer_original.shap_values(
@@ -305,7 +319,7 @@ class Experiment:
         os.makedirs(dataset_folder, exist_ok=True)
 
         # 生成 CSV 文件名
-        csv_filename = f"fairSHAP-{self.fairshap_base}_{self.ith_fold}-fold_results.csv"
+        csv_filename = f"fairSHAP-{self.fairshap_base}_{self.matching_method}_{self.ith_fold}-fold_results.csv"
         csv_filepath = os.path.join(dataset_folder, csv_filename)
 
         # 保存 CSV
