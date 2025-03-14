@@ -17,7 +17,8 @@ from src.data.unified_dataloader import load_dataset
 from src.attribution.oracle_metric import perturb_numpy_ver
 from fairness_related.fairness_measures import marginalised_np_mat, grp1_DP, grp2_EO, grp3_PQP
 import os
-
+import numpy as np
+from scipy.stats import wasserstein_distance
 
 class BenchMarkPreprocessingMethods:
     def __init__(self,
@@ -96,6 +97,7 @@ class BenchMarkPreprocessingMethods:
             processed_eo = []
             processed_pqp = []
             modification_num = []
+            wasserstein_distance = []
             for j, (train_index, val_index) in enumerate(kf.split(processed_data)):
                 print("-------------------------------------")
                 print(f"-------------{j}th fold----------------")
@@ -119,11 +121,13 @@ class BenchMarkPreprocessingMethods:
 
                 # Mitigate bias
                 if self.sota_method == 'disparate_impact':
-                    X_train_repair, X_val_repair = self._disparate_impact_remover(repair_level=1.0, sensitive_attribute=self.sen_att_name, X_train=X_train, X_val=X_val)
+                    X_train_repair, X_val_repair = self._disparate_impact_remover(repair_level=1, sensitive_attribute=self.sen_att_name, X_train=X_train, X_val=X_val)
+                    wasserstein_scores = compute_wasserstein_fidelity(X_train.values, X_train_repair)
                     model = XGBClassifier()
                     model.fit(X_train_repair, y_train)
-                    
-                    accuracy, dr, dp, eo, pqp = self._run_evaluation_np(model, X_val_repair, y_val)
+
+                    # accuracy, dr, dp, eo, pqp = self._run_evaluation_np(model, X_val_repair, y_val)
+                    accuracy, dr, dp, eo, pqp = self._run_evaluation_pd(model, X_val, y_val)
                     diff_count = np.sum(X_train.values != X_train_repair)
                     processed_accuracy.append(accuracy)
                     processed_dr.append(dr)
@@ -131,13 +135,16 @@ class BenchMarkPreprocessingMethods:
                     processed_eo.append(eo)
                     processed_pqp.append(pqp)
                     modification_num.append(diff_count)
+                    wasserstein_distance.append(wasserstein_scores)
                     print(f"diff_count: {diff_count}")
                 elif self.sota_method == 'correlation_removal':
-                    X_train_repair = self._correlation_removal(X_train, remove_ratio=1)
-                    X_val_repair = self._correlation_removal(X_val, remove_ratio=1)
+                    X_train_repair, X_val_repair= self._correlation_removal(X_train, X_val, remove_ratio=1)
+                    wasserstein_scores = compute_wasserstein_fidelity(X_train.values, X_train_repair)
+                    # X_val_repair = self._correlation_removal(X_val, remove_ratio=1)
                     model = XGBClassifier()
                     model.fit(X_train_repair, y_train)
-                    accuracy, dr, dp, eo, pqp = self._run_evaluation_np(model, X_val_repair, y_val)
+                    # accuracy, dr, dp, eo, pqp = self._run_evaluation_np(model, X_val_repair, y_val)
+                    accuracy, dr, dp, eo, pqp = self._run_evaluation_pd(model, X_val, y_val)
                     diff_count = np.sum(X_train.values != X_train_repair)
                     processed_accuracy.append(accuracy)
                     processed_dr.append(dr)
@@ -145,6 +152,7 @@ class BenchMarkPreprocessingMethods:
                     processed_eo.append(eo)
                     processed_pqp.append(pqp)
                     modification_num.append(diff_count)
+                    wasserstein_distance.append(wasserstein_scores)
                     print(f"diff_count: {diff_count}")
                 elif self.sota_method == 'reweighing':
                     model = XGBClassifier()
@@ -200,6 +208,7 @@ class BenchMarkPreprocessingMethods:
                 'processed_eo': f"{np.mean(processed_eo):.4f} ± {np.std(processed_eo):.4f}",
                 'processed_pqp': f"{np.mean(processed_pqp):.4f} ± {np.std(processed_pqp):.4f}",
                 'modification_num': f"{np.mean(modification_num):.4f} ± {np.std(modification_num):.4f}",
+                'wasserstein_distance': f"{np.mean(wasserstein_distance):.4f} ± {np.std(wasserstein_distance):.4f}",
             }
             processed_results = pd.DataFrame(processed_stats, index=[self.dataset_name]).T
 
@@ -233,14 +242,19 @@ class BenchMarkPreprocessingMethods:
         repaired_features_val[:, index] = X_val.values[:, index]
         return repaired_features_train, repaired_features_val
     
-    def _correlation_removal(self, X:pd.DataFrame, remove_ratio=1):
+    def _correlation_removal(self, X:pd.DataFrame, X_val:pd.DataFrame, remove_ratio=1):
         cr = CorrelationRemover(sensitive_feature_ids=[self.sen_att_name], alpha=remove_ratio)
         cr.fit(X)
         # CorrelationRemover(sensitive_feature_ids=sensitive_feature)
         X_transform_without_sen_att = cr.transform(X)
         sensitive_column = X['sex'].copy()
         X_transform_with_sensitive = np.insert(X_transform_without_sen_att, self.sen_att_index, sensitive_column, axis=1)
-        return X_transform_with_sensitive
+
+        X_val_transform_without_sen_att = cr.transform(X_val)
+        sensitive_column_val = X_val['sex'].copy()
+        X_val_transform_with_sensitive = np.insert(X_val_transform_without_sen_att, self.sen_att_index, sensitive_column_val, axis=1)
+
+        return X_transform_with_sensitive, X_val_transform_with_sensitive
 
     def _reweighing(self, X_train, y_train):
         # self.w_p_fav = 1.
@@ -377,3 +391,16 @@ def fairness_value_function(sen_att, priv_val, unpriv_dict, X, model):
     fx = model.predict_proba(X)[:, 1]
     fx_q = model.predict_proba(X_disturbed)[:, 1]
     return np.mean(np.abs(fx - fx_q))
+
+
+
+def compute_wasserstein_fidelity(original_data: np.ndarray, augmented_data: np.ndarray):
+    assert original_data.shape == augmented_data.shape, "数据形状必须匹配"
+    
+    num_features = original_data.shape[1]
+    wasserstein_scores = [
+        wasserstein_distance(original_data[:, i], augmented_data[:, i]) 
+        for i in range(num_features)
+    ]
+    
+    return np.array(wasserstein_scores)
