@@ -15,7 +15,7 @@ from src.attribution.oracle_metric import perturb_numpy_ver
 from fairness_related.fairness_measures import marginalised_np_mat, grp1_DP, grp2_EO, grp3_PQP
 EPSILON = 1e-20
 
-class Baseline:
+class Afef:
     """ 
     The core part of how fairshap(based on discriminative_risk) works.
     X_train_majority_label1 match with X_train_minority_label1
@@ -186,53 +186,43 @@ class Baseline:
         after_PQP_on_test_set = []
         fairness_accuracy_pairs = []
         changed_value_info = []   # 存储修改的值的信息(column, before_value, after_value)
-        for action_number in values_range:
-            # Step 1: 将 varphi 的值和位置展开为一维
-            flat_varphi = [(value, row, col) for row, row_vals in enumerate(random_varphi)
-                        for col, value in enumerate(row_vals)]
-            # Step 2: 按值降序排序
-            flat_varphi_sorted = sorted(flat_varphi, key=lambda x: x[0], reverse=True)
-            # Step 3: 挑出前 action_number 个数的位置
-            top_positions = flat_varphi_sorted[:action_number]
-            
-            # Step 4: 替换 X 中前三列的值为 S 中对应位置的值
-            for value, row_idx, col_idx in top_positions:
-                X_change.iloc[row_idx, col_idx] = X_base[row_idx, col_idx]
 
-            x = X_change
-            y = pd.concat([y_train_minority_label0, y_train_minority_label1, y_train_majority_label0, y_train_majority_label1], axis=0)
+        # Step 1: 将 varphi 的值和位置展开为一维
+        flat_varphi = [(value, row, col) for row, row_vals in enumerate(random_varphi)
+                    for col, value in enumerate(row_vals)]
+        # Step 2: 按值降序排序
+        flat_varphi_sorted = sorted(flat_varphi, key=lambda x: x[0], reverse=True)
+        # Step 3: 挑出前 action_number 个数的位置
+        top_positions = flat_varphi_sorted[:action_number]
+        
+        # Step 4: 替换 X 中前三列的值为 S 中对应位置的值
+        for value, row_idx, col_idx in top_positions:
+            X_change.iloc[row_idx, col_idx] = X_base[row_idx, col_idx]
 
-            # Step 6: Train and evaluate model            
-            model_new = XGBClassifier()
-            model_new.fit(x, y)
-            after = fairness_value_function(sen_att, priv_val, unpriv_dict, self.X_test.values, model_new)
-            after_values_on_test_set.append(after)
-            
-            # step7: 评估新模型在其他fairnes measures上的表现
-            if self.dataset_name != 'compas4race':
-                priv_idx = self.X_test['sex'].to_numpy().astype(bool)
-            else:
-                priv_idx = self.X_test['race'].to_numpy().astype(bool)
-            y_hat = model_new.predict(self.X_test)
-            y_test = self.y_test
-            g1_Cm, g0_Cm = marginalised_np_mat(y_test, y_hat, 1, priv_idx)
-            fair_grp1 = grp1_DP(g1_Cm, g0_Cm)[0]
-            fair_grp2 = grp2_EO(g1_Cm, g0_Cm)[0]
-            fair_grp3 = grp3_PQP(g1_Cm, g0_Cm)[0]
-            after_DP_on_test_set.append(fair_grp1)
-            after_EO_on_test_set.append(fair_grp2)
-            after_PQP_on_test_set.append(fair_grp3)
+        x = X_change
+        y = pd.concat([y_train_minority_label0, y_train_minority_label1, y_train_majority_label0, y_train_majority_label1], axis=0)
 
-            if after < self.original_Xtest_DR:
-                y_new_pred = model_new.predict(self.X_test)
-                accuracy_new = accuracy_score(self.y_test, y_new_pred)
-                fairness_accuracy_pairs.append((after, accuracy_new, action_number))  # Store both values as a tuple
+        # Step 6: Train and evaluate model            
+        model_new = XGBClassifier()
+        model_new.fit(x, y)
+        after = fairness_value_function(sen_att, priv_val, unpriv_dict, self.X_test.values, model_new)
+        after_values_on_test_set.append(after)
+        
+        # step7: 评估新模型在其他fairnes measures上的表现
+        if self.dataset_name != 'compas4race':
+            priv_idx = self.X_test['sex'].to_numpy().astype(bool)
+        else:
+            priv_idx = self.X_test['race'].to_numpy().astype(bool)
+        y_hat = model_new.predict(self.X_test)
+        y_test = self.y_test
+        g1_Cm, g0_Cm = marginalised_np_mat(y_test, y_hat, 1, priv_idx)
+        fair_grp1 = grp1_DP(g1_Cm, g0_Cm)[0]
+        fair_grp2 = grp2_EO(g1_Cm, g0_Cm)[0]
+        fair_grp3 = grp3_PQP(g1_Cm, g0_Cm)[0]
+        after_DP_on_test_set.append(fair_grp1)
+        after_EO_on_test_set.append(fair_grp2)
+        after_PQP_on_test_set.append(fair_grp3)
 
-        viz1(values_range, after_values_on_test_set, self.original_Xtest_DR, title='new_model\'s DR on test set',color='purple')
-        viz1(values_range, after_DP_on_test_set, self.original_Xtest_DP, title='new_model\'s DP on test set', color='g')
-        viz1(values_range, after_EO_on_test_set, self.original_Xtest_EO, title='new_model\'s EO on test set', color='b')
-        viz1(values_range, after_PQP_on_test_set, self.original_Xtest_PQP, title='new_model\'s PQP on test set',color='y')
-        pass
 
     def baseline2(self):
         """

@@ -51,7 +51,8 @@ class BenchMarkPreprocessingMethods:
         '''
         Run the chosn SOTA method on all datasets and save the results in a csv file
         '''
-        for i in ['german_credit', 'compas', 'compas4race', 'adult', 'default_credit', 'census_income_kdd']:
+        # for i in ['german_credit', 'compas', 'compas4race', 'adult', 'default_credit', 'census_income_kdd']:
+        for i in ['recruit']:
             self.dataset_name = i
             print("-------------------------------------")
             print(f"---!! on {self.dataset_name} dataset !!---")
@@ -80,6 +81,10 @@ class BenchMarkPreprocessingMethods:
                 self.sen_att_name = 'sex'
                 self.target_name = 'default_payment_next_month'
                 self.priv = 0
+            elif self.dataset_name == 'recruit':
+                self.sen_att_name = 'sex'
+                self.target_name = 'decision'
+                self.priv = 1
             _, processed_data = load_dataset(self.dataset_name)
             if self.dataset_name == 'census_income_kdd':
                 processed_data = processed_data.sample(frac=0.1, random_state=25) 
@@ -121,13 +126,12 @@ class BenchMarkPreprocessingMethods:
 
                 # Mitigate bias
                 if self.sota_method == 'disparate_impact':
-                    X_train_repair, X_val_repair = self._disparate_impact_remover(repair_level=1, sensitive_attribute=self.sen_att_name, X_train=X_train, X_val=X_val)
+                    X_train_repair, X_val_repair = self._disparate_impact_remover(repair_level=1, X_train=X_train, X_val=X_val)
                     wasserstein_scores = compute_wasserstein_fidelity(X_train.values, X_train_repair)
                     model = XGBClassifier()
                     model.fit(X_train_repair, y_train)
-
-                    # accuracy, dr, dp, eo, pqp = self._run_evaluation_np(model, X_val_repair, y_val)
-                    accuracy, dr, dp, eo, pqp = self._run_evaluation_pd(model, X_val, y_val)
+                    accuracy, dr, dp, eo, pqp = self._run_evaluation_np(model, X_val_repair, y_val)
+                    # accuracy, dr, dp, eo, pqp = self._run_evaluation_pd(model, X_val, y_val)
                     diff_count = np.sum(X_train.values != X_train_repair)
                     processed_accuracy.append(accuracy)
                     processed_dr.append(dr)
@@ -138,13 +142,13 @@ class BenchMarkPreprocessingMethods:
                     wasserstein_distance.append(wasserstein_scores)
                     print(f"diff_count: {diff_count}")
                 elif self.sota_method == 'correlation_removal':
-                    X_train_repair, X_val_repair= self._correlation_removal(X_train, X_val, remove_ratio=1)
+                    X_train_repair, X_val_repair= self._correlation_removal(X_train, X_val, repair_level=1) 
                     wasserstein_scores = compute_wasserstein_fidelity(X_train.values, X_train_repair)
                     # X_val_repair = self._correlation_removal(X_val, remove_ratio=1)
                     model = XGBClassifier()
                     model.fit(X_train_repair, y_train)
-                    # accuracy, dr, dp, eo, pqp = self._run_evaluation_np(model, X_val_repair, y_val)
-                    accuracy, dr, dp, eo, pqp = self._run_evaluation_pd(model, X_val, y_val)
+                    accuracy, dr, dp, eo, pqp = self._run_evaluation_np(model, X_val_repair, y_val)
+                    # accuracy, dr, dp, eo, pqp = self._run_evaluation_pd(model, X_val, y_val)
                     diff_count = np.sum(X_train.values != X_train_repair)
                     processed_accuracy.append(accuracy)
                     processed_dr.append(dr)
@@ -224,7 +228,7 @@ class BenchMarkPreprocessingMethods:
 
 
 
-    def _disparate_impact_remover(self, repair_level, sensitive_attribute, X_train:pd.DataFrame, X_val:pd.DataFrame):
+    def _disparate_impact_remover(self, repair_level, X_train:pd.DataFrame, X_val:pd.DataFrame):
         DisparateImpactRemover(repair_level=1.0, sensitive_attribute=self.sen_att_name)
         from BlackBoxAuditing.repairers.GeneralRepairer import Repairer
         self.Repairer = Repairer
@@ -242,8 +246,8 @@ class BenchMarkPreprocessingMethods:
         repaired_features_val[:, index] = X_val.values[:, index]
         return repaired_features_train, repaired_features_val
     
-    def _correlation_removal(self, X:pd.DataFrame, X_val:pd.DataFrame, remove_ratio=1):
-        cr = CorrelationRemover(sensitive_feature_ids=[self.sen_att_name], alpha=remove_ratio)
+    def _correlation_removal(self, X:pd.DataFrame, X_val:pd.DataFrame,repair_level:float):
+        cr = CorrelationRemover(sensitive_feature_ids=[self.sen_att_name], alpha=repair_level)
         cr.fit(X)
         # CorrelationRemover(sensitive_feature_ids=sensitive_feature)
         X_transform_without_sen_att = cr.transform(X)

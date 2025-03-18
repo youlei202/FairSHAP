@@ -12,17 +12,17 @@ from src.matching.nn_matcher import NearestNeighborDataMatcher
 from src.attribution import FairnessExplainer
 from src.data.unified_dataloader import load_dataset
 from src.attribution.oracle_metric import perturb_numpy_ver
-from fairness_related.fairness_measures import marginalised_np_mat, grp1_DP, grp2_EO, grp3_PQP
+
 import os
 import numpy as np
 from scipy.stats import wasserstein_distance
 from src.attribution import FairnessExplainer
 from src.composition.data_composer import DataComposer
 from src.attribution.oracle_metric import perturb_numpy_ver
-from fairness_related.fairness_measures import marginalised_np_mat, grp1_DP, grp2_EO, grp3_PQP
+
 
 class FairSHAP:
-    def __init__(self, threshold=0.1, matching_method='NN', fairshap_base='DR'):
+    def __init__(self, threshold=0.05, matching_method='NN', fairshap_base='DR'):
         # self.dataset_name = dataset_name
         self.threshold = threshold
         self.matching_method = matching_method
@@ -243,7 +243,7 @@ class FairSHAP:
                 # Step 2: 按值降序排序
                 flat_varphi_sorted = sorted(flat_varphi, key=lambda x: x[0], reverse=True)
                 # Step 3: 挑出前 action_number 个数的位置
-                top_positions = flat_varphi_sorted[:non_zero_count]
+                top_positions = flat_varphi_sorted[:non_zero_count-1]
                 print(f"top_positions: {non_zero_count}")
                 # Step 4: 替换 X 中前三列的值为 S 中对应位置的值
                 for value, row_idx, col_idx in top_positions:
@@ -284,7 +284,7 @@ class FairSHAP:
             }
             processed_results = pd.DataFrame(processed_stats, index=[self.dataset_name]).T
 
-            processed_csv_file = os.path.join(save_dir, "FairSHAP_results.csv")  # 存储路径
+            processed_csv_file = os.path.join(save_dir, f"FairSHAP_{self.matching_method}_{self.threshold}_results.csv")
             if os.path.exists(processed_csv_file):
                 existing_df = pd.read_csv(processed_csv_file, index_col=0)
                 existing_df[self.dataset_name] = processed_results[self.dataset_name]

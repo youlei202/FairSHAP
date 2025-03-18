@@ -14,7 +14,7 @@ from src.matching.nn_matcher import NearestNeighborDataMatcher
 from src.attribution import FairnessExplainer
 from src.composition.data_composer import DataComposer
 from src.attribution.oracle_metric import perturb_numpy_ver
-from fairness_related.fairness_measures import marginalised_np_mat, grp1_DP, grp2_EO, grp3_PQP
+
 
 
 EPSILON = 1e-20
@@ -71,10 +71,13 @@ class Experiment:
         elif self.dataset_name == 'compas4race':
             self.sensitive_attri = 'race'
             self.gap = 1
-        elif self.dataset_name == 'census_income':
+        elif self.dataset_name == 'census_income_kdd':
             self.sensitive_attri = 'sex'
             self.gap = 1
         elif self.dataset_name == 'default_credit':
+            self.sensitive_attri = 'sex'
+            self.gap = 1
+        elif self.dataset_name == 'recruit':
             self.sensitive_attri = 'sex'
             self.gap = 1
         else :
@@ -319,7 +322,7 @@ class Experiment:
         os.makedirs(dataset_folder, exist_ok=True)
 
         # 生成 CSV 文件名
-        csv_filename = f"fairSHAP-{self.fairshap_base}_{self.matching_method}_{self.ith_fold}-fold_results.csv"
+        csv_filename = f"fairSHAP-{self.fairshap_base}_{threshold}_{self.matching_method}_{self.ith_fold}-fold_results.csv"
         csv_filepath = os.path.join(dataset_folder, csv_filename)
 
         # 保存 CSV
@@ -479,37 +482,37 @@ def calculate_metrics(y_test, y_pred, pos=1):
     
     return recall, precision, sufficiency
 
-if __name__ == 'main':
+# if __name__ == 'main':
 
-    from data.unified_dataloader import load_dataset
+#     from data.unified_dataloader import load_dataset
 
-    import pandas as pd
-    import numpy as np
-    from sklearn.model_selection import train_test_split
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.ensemble import RandomForestClassifier
-    from xgboost import XGBClassifier
-    from sklearn.metrics import accuracy_score
+#     import pandas as pd
+#     import numpy as np
+#     from sklearn.model_selection import train_test_split
+#     from sklearn.linear_model import LogisticRegression
+#     from sklearn.ensemble import RandomForestClassifier
+#     from xgboost import XGBClassifier
+#     from sklearn.metrics import accuracy_score
 
-    a, processed_german_credit = load_dataset('german_credit')
-    '''German Credit dataset'''
-    df = processed_german_credit.copy()
-    X = df.drop('Risk', axis=1)
-    y = df['Risk']
+#     a, processed_german_credit = load_dataset('german_credit')
+#     '''German Credit dataset'''
+#     df = processed_german_credit.copy()
+#     X = df.drop('Risk', axis=1)
+#     y = df['Risk']
 
-    # into 70% training and 30% testing
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=1) 
-    print(f'X_train shape: {X_train.shape}')
-    print(f'X_test shape: {X_test.shape}')
+#     # into 70% training and 30% testing
+#     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=1) 
+#     print(f'X_train shape: {X_train.shape}')
+#     print(f'X_test shape: {X_test.shape}')
 
-    model = XGBClassifier()  # 可以替换为 RandomForestClassifier() 等其他模型
-    model.fit(X_train,y_train)
+#     model = XGBClassifier()  # 可以替换为 RandomForestClassifier() 等其他模型
+#     model.fit(X_train,y_train)
 
-    # 预测和评估
-    y_pred = model.predict(X_test)
-    accuracy = accuracy_score(y_test, y_pred)
-    print(f'Accuracy: {accuracy}')
+#     # 预测和评估
+#     y_pred = model.predict(X_test)
+#     accuracy = accuracy_score(y_test, y_pred)
+#     print(f'Accuracy: {accuracy}')
 
-    # 实例化 Experiment 类  并运行
-    experiment = Experiment(model=model, X_train=X_train, y_train=y_train, X_test=X_test, y_test=y_test, dataset_name='german_credit')
-    experiment.run(ith_fold=1)
+#     # 实例化 Experiment 类  并运行
+#     experiment = Experiment(model=model, X_train=X_train, y_train=y_train, X_test=X_test, y_test=y_test, dataset_name='german_credit')
+#     experiment.run(ith_fold=1)

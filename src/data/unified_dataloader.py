@@ -41,7 +41,10 @@ def load_dataset(dataset_name):
 
     elif dataset_name == 'compas4race':
         original_data, processed_data = compas4race()
-    
+
+    elif dataset_name == 'recruit':
+        original_data, processed_data = recruit()
+
     else:
         raise ValueError(
         f"Unknown dataset: {dataset_name}. If you want to use the German Credit Dataset, please input 'german_credit'. If you want to use the UCI Dataset, please input 'uci'. If you want to use the bank_marketing Dataset, please input 'bank_marketing'."
@@ -313,6 +316,46 @@ def compas4race():
     target_column = processed_data.pop('two_year_recid')
     processed_data['two_year_recid'] = target_column
     return original_data, processed_data
+
+def recruit():
+    '''Utrecht Fairness Recruitment dataset- https://www.kaggle.com/datasets/ictinstitute/utrecht-fairness-recruitment-dataset?resource=download&select=recruitmentdataset-2022-1.3.csv'''
+    file_path = 'dataset/recruit/recruitmentdataset-2022-1.3.csv'
+    original_data = pd.read_csv(file_path)
+    processed_data = original_data.copy()
+    processed_data = processed_data.dropna()
+    # 1. Drop the ID column
+    processed_data.drop('Id', axis=1, inplace=True)
+    # 2. rename 'gender' feature to 'sex'
+    processed_data['sex'] = processed_data['gender'].map({'male':1, 'female':0})
+    processed_data.drop('gender', axis=1, inplace=True)
+    # 处理布尔特征
+    for col in ['ind-debateclub', 'ind-programming_exp', 'ind-international_exp', 'ind-entrepeneur_exp', 'ind-exact_study']:
+        # 确保值为布尔类型
+        processed_data[col] = processed_data[col].astype(bool)
+        # 映射布尔值
+        processed_data[col] = processed_data[col].map({True:1, False:0})
+
+    # 处理目标列 'decision'
+    processed_data['decision'] = processed_data['decision'].map({True:1, False:0})
+    numerical_features = ['age', 'ind-university_grade', 'ind-languages']
+    scaler = StandardScaler()
+    processed_data[numerical_features] = scaler.fit_transform(processed_data[numerical_features])   
+    # 对分类特征进行独热编码
+    categorical_features = ['nationality', 'sport', 'ind-degree', 'company']
+    processed_data = pd.get_dummies(processed_data, columns=categorical_features)
+
+    # 获取独热编码生成的列名
+    one_hot_columns = [col for col in processed_data.columns if col not in original_data.columns]
+    processed_data = processed_data.dropna()
+    # 将独热编码列转换为整数类型
+    processed_data[one_hot_columns] = processed_data[one_hot_columns].astype(int)
+
+    target_column = processed_data.pop('decision')
+    processed_data['decision'] = target_column
+    return original_data, processed_data
+
+
+
 if __name__ == '__main__':
     a, b =german_credit()
     print(a)
