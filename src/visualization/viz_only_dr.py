@@ -3,6 +3,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter  # For curve smoothing
 
+'''
+This script shows the percentage improvement in DR reduction across different datasets under the effect of FairSHAP.
+'''
+
 def plot_multi_dataset_fairness_improvement(
     datasets_info,
     stop_when_no_data=4,
@@ -14,19 +18,14 @@ def plot_multi_dataset_fairness_improvement(
     smooth_window=20,
     smooth_polyorder=2
 ):
-    """
-    生成符合 ICLR/ICML 风格的 DR 指标改进折线图（单行布局），每个 modification_num/5 位置加空心方块点，并保存为 PNG。
-    """
-    # 只保留 DR 指标
     measures_info = [
         ("DR", "new_DR"),
     ]
-
     num_datasets = len(datasets_info)
     num_metrics = len(measures_info)
 
     if figsize is None:
-        figsize = (num_datasets * 3.5, 3.0)  # 一行显示
+        figsize = (num_datasets * 3.5, 3.0)  
 
     fig, axes = plt.subplots(1, num_datasets, figsize=figsize, squeeze=False)
 
@@ -87,16 +86,16 @@ def plot_multi_dataset_fairness_improvement(
             ax.plot(action_range, smoothed_means, color=color, linewidth=2)
             ax.fill_between(action_range, smoothed_means - stds, smoothed_means + stds, alpha=fill_alpha, color=color)
 
-            # 在每隔 modification_num/5 的位置加空心方块点
+            # Add hollow square markers every modification_num/5 steps
             step = max(1, len(action_range) // 5)
             for i in range(0, len(action_range), step):
                 ax.plot(action_range[i], smoothed_means[i], marker='s', markerfacecolor='white', markeredgecolor=color, markersize=5)
 
-            # 仅第一个子图加 y 标签
+            # Only add y-label to the first subplot
             if dataset_idx == 0:
                 ax.set_ylabel("DR Reduction (%)", fontsize=10)
             else:
-                pass  # 保留 y 轴刻度值，不隐藏
+                pass  # Keep y-axis tick values, do not hide
 
             ax.set_xlabel("Mod. Num", fontsize=10)
             ax.set_title(dataset_name, fontsize=10)
@@ -118,6 +117,7 @@ def plot_multi_dataset_fairness_improvement(
 
     return output_filename
 
+
 def extract_original_values(fold):
     """Extract original metric values from the first row of a fold's dataframe."""
     original_accuracy = fold.loc[0, 'new_accuracy']
@@ -126,6 +126,7 @@ def extract_original_values(fold):
     original_EO = fold.loc[0, 'new_EO']
     original_PQP = fold.loc[0, 'new_PQP']
     return original_accuracy, original_DR, original_DP, original_EO, original_PQP
+
 
 def load_dataset_folds(dataset_path, fold_pattern, num_folds=5):
     """Load all folds for a dataset and prepare data for visualization."""
@@ -169,7 +170,6 @@ def load_dataset_folds(dataset_path, fold_pattern, num_folds=5):
 if __name__ == "__main__":
     # List of datasets to process
     datasets = [
-
         {
             'name': 'German Credit',
             'path': 'saved_results/german_credit/',
@@ -217,10 +217,7 @@ if __name__ == "__main__":
         baseline=0.0,
         figsize=(18, 3),  # Width, height
         fill_alpha=0.2,
-        color_palette=['b', 'g',  '#FF9C9C', 'c', 'm', 'y'],
+        color_palette=['b', 'g', '#FF9C9C', 'c', 'm', 'y'],
         smooth_window=50, 
         smooth_polyorder=1
     )
-    
-    # plt.savefig('multi_dataset_fairness_comparison.png', dpi=300, bbox_inches='tight')
-    # plt.show()

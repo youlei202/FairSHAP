@@ -193,7 +193,7 @@ class Afef:
         # Step 2: 按值降序排序
         flat_varphi_sorted = sorted(flat_varphi, key=lambda x: x[0], reverse=True)
         # Step 3: 挑出前 action_number 个数的位置
-        top_positions = flat_varphi_sorted[:action_number]
+        top_positions = flat_varphi_sorted[:self.change_num]
         
         # Step 4: 替换 X 中前三列的值为 S 中对应位置的值
         for value, row_idx, col_idx in top_positions:

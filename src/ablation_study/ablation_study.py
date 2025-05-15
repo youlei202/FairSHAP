@@ -25,12 +25,13 @@ class AblationStudy:
 
 
     def run_ablation_study_1(self):
-        '''
+        """
         Random Background Data Modification: Randomly selecting the corresponding number of values from the background data to modify the original dataset.
-        
-        因为在做ablation study1的时候，我们发现会出现大量点被替换成相同的值，所以我们把self.change_num设置得比较高，但是最终在代码中加一句条件语句，如果被替换的值和原来的值相同，就不替换。
 
-        '''
+        During Ablation Study 1, we found that many data points were replaced with identical values. To mitigate this issue, we set a relatively high self.change_num.
+        However, in the final implementation, we added a conditional check to skip replacement if the new value is the same as the original.
+        """
+
         for i in ['german_credit', 'compas', 'compas4race', 'adult', 'default_credit', 'census_income_kdd']:
             self.dataset_name = i
             print("-------------------------------------")
@@ -50,7 +51,7 @@ class AblationStudy:
                 self.sen_att_name = 'sex'
                 self.target_name = 'two_year_recid'
                 self.change_num = 8000
-                self.priv =1
+                self.priv = 1
             elif self.dataset_name == 'compas4race':
                 self.sen_att_name = 'race'
                 self.target_name = 'two_year_recid'
@@ -66,9 +67,12 @@ class AblationStudy:
                 self.target_name = 'default_payment_next_month'
                 self.change_num = 5000
                 self.priv = 0
+
             _, processed_data = load_dataset(self.dataset_name)
+
             if self.dataset_name == 'census_income_kdd':
-                processed_data = processed_data.sample(frac=0.1, random_state=25) 
+                processed_data = processed_data.sample(frac=0.1, random_state=25)
+
             kf = KFold(n_splits=5, shuffle=True, random_state=1)  # 5-fold cross-validation
             processed_accuracy = []
             processed_dr = []
@@ -77,88 +81,94 @@ class AblationStudy:
             processed_pqp = []
             modification_num = []
             wasserstein_distance = []
+
             for j, (train_index, val_index) in enumerate(kf.split(processed_data)):
                 print("-------------------------------------")
                 print(f"-------------{j}th fold----------------")
                 print("-------------------------------------")
+
                 train_data, val_data = processed_data.iloc[train_index], processed_data.iloc[val_index]
                 X_train, y_train = train_data.drop(self.target_name, axis=1), train_data[self.target_name]
                 X_val, y_val = val_data.drop(self.target_name, axis=1), val_data[self.target_name]
+
                 model = XGBClassifier()
                 model.fit(X_train, y_train)
+
+                # Split into majority and minority groups based on label
                 X_train_majority_label0, y_train_majority_label0, X_train_majority_label1, y_train_majority_label1, X_train_minority_label0, y_train_minority_label0, X_train_minority_label1, y_train_minority_label1 = self._split_into_majority_minority_label0_label1(X_train=X_train, y_train=y_train)
+
+                # Perform nearest neighbor matching for each group
                 matching_majority_label1 = NearestNeighborDataMatcher(X_labeled=X_train_majority_label1, X_unlabeled=X_train_minority_label1).match(n_neighbors=1)
                 matching_majority_label0 = NearestNeighborDataMatcher(X_labeled=X_train_majority_label0, X_unlabeled=X_train_minority_label0).match(n_neighbors=1)
                 matching_minority_label1 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label1, X_unlabeled=X_train_majority_label1).match(n_neighbors=1)
                 matching_minority_label0 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label0, X_unlabeled=X_train_majority_label0).match(n_neighbors=1)
 
-
+                # Concatenate all groups into one DataFrame
                 X_change = pd.concat([X_train_majority_label1, X_train_majority_label0, X_train_minority_label1, X_train_minority_label0], axis=0)
                 x = X_change.copy()
-                # y = pd.concat([y_train_minority_label0, y_train_minority_label1, y_train_majority_label0, y_train_majority_label1], axis=0)
                 y = pd.concat([y_train_majority_label1, y_train_majority_label0, y_train_minority_label1, y_train_minority_label0], axis=0)
-                
+
+                # Generate counterfactual data using DataComposer
                 q_majority_label1 = DataComposer(
-                                x_counterfactual=X_train_minority_label1.values,
-                                joint_prob=matching_majority_label1,
-                                method="max").calculate_q()
+                    x_counterfactual=X_train_minority_label1.values,
+                    joint_prob=matching_majority_label1,
+                    method="max").calculate_q()
+
                 q_majority_label0 = DataComposer(
-                                x_counterfactual=X_train_minority_label0.values,
-                                joint_prob=matching_majority_label0,
-                                method="max").calculate_q()
+                    x_counterfactual=X_train_minority_label0.values,
+                    joint_prob=matching_majority_label0,
+                    method="max").calculate_q()
+
                 q_minority_label1 = DataComposer(
-                                x_counterfactual=X_train_majority_label1.values, 
-                                joint_prob=matching_minority_label1, 
-                                method="max").calculate_q() 
+                    x_counterfactual=X_train_majority_label1.values,
+                    joint_prob=matching_minority_label1,
+                    method="max").calculate_q()
+
                 q_minority_label0 = DataComposer(
-                                x_counterfactual=X_train_majority_label0.values, 
-                                joint_prob=matching_minority_label0, 
-                                method="max").calculate_q()
+                    x_counterfactual=X_train_majority_label0.values,
+                    joint_prob=matching_minority_label0,
+                    method="max").calculate_q()
+
                 X_base = np.vstack((q_majority_label1, q_majority_label0, q_minority_label1, q_minority_label0))
 
-                # 4. 在X_change的所有值中挑self.change_num个位置，把这些位置的值替换成X_base里的值
-                print(f'在X_change的所有值中挑{self.change_num}个位置，把这些位置的值替换成X_base里的值')
+                # 4. Select self.change_num positions in X_change and replace them with values from X_base
+                print(f'Selecting {self.change_num} positions in X_change and replacing them with values from X_base')
 
-                # 获取 X_change 的形状 (m 行, n 列)
                 num_rows, num_cols = X_change.shape
+                random_row_indices = np.random.choice(num_rows, self.change_num, replace=True)
+                random_col_indices = np.random.choice(num_cols, self.change_num, replace=True)
 
-                # 生成 self.change_num 个随机的 (行索引, 列索引) 对
-                random_row_indices = np.random.choice(num_rows, self.change_num, replace=True)  # 随机选择 300 个行索引
-                random_col_indices = np.random.choice(num_cols, self.change_num, replace=True)  # 仅从前 10 列中选择
-
-                
-                print(f'X_change shape:{X_change.shape}')
+                print(f'X_change shape: {X_change.shape}')
                 d = np.sum(X_change.values != X_base)
-                print(f'X_change 与 X_base 有{d}个不同的值')
-                n=0
-                # 逐个替换 X_change 中的值
+                print(f'There are {d} different values between X_change and X_base')
+                n = 0
+
+                # Replace only when the new value is different from the original
                 for row, col in zip(random_row_indices, random_col_indices):
                     if X_change.iloc[row, col] == X_base[row, col]:
-                       n = n + 1
+                        n += 1
                     else:
                         X_change.iloc[row, col] = X_base[row, col]
+
                 diff_count = np.sum(X_change.values != x.values)
-                print(f'要替换{self.change_num}个值')
-                print(f'有{n}个值相同，所以不能被替换')
-                print(f'实际替换了{diff_count}个值')
+                print(f'A total of {self.change_num} values are intended to be replaced')
+                print(f'{n} values are the same as original and will not be replaced')
+                print(f'Actually replaced {diff_count} values')
 
-
-                # 初始化 fairness_measure中需要使用的变量
+                # Set up fairness evaluation parameters
                 sen_att_name = [self.sen_att_name]
                 sen_att = [X_val.columns.get_loc(name) for name in sen_att_name]
                 priv_val = [1]
                 unpriv_dict = [list(set(X_val.values[:, sa])) for sa in sen_att]
                 for sa_list, pv in zip(unpriv_dict, priv_val):
                     sa_list.remove(pv)
-                # Step 6: Train and evaluate model            
+
+                # Train and evaluate the modified model
                 model_new = XGBClassifier()
                 model_new.fit(X_change, y)
 
-                # accuracy, dr, dp, eo, pqp = self._run_evaluation_np(model, X_val_repair, y_val)
                 accuracy, dr, dp, eo, pqp = self._run_evaluation_pd(model_new, X_val, y_val)
-
                 wasserstein_scores = compute_wasserstein_fidelity(X_change.values, x.values)
-
 
                 processed_accuracy.append(accuracy)
                 processed_dr.append(dr)
@@ -168,10 +178,10 @@ class AblationStudy:
                 modification_num.append(diff_count)
                 wasserstein_distance.append(wasserstein_scores)
 
-            
             save_dir = "saved_results/ablation_study"
-            os.makedirs(save_dir, exist_ok=True)  # 自动创建目录（如果不存在）
-            # Save PROCESSED results of current dataset in a csv file
+            os.makedirs(save_dir, exist_ok=True)
+
+            # Save processed results for the current dataset
             processed_stats = {
                 'processed_accuracy': f"{np.mean(processed_accuracy):.4f} ± {np.std(processed_accuracy):.4f}",
                 'processed_dr': f"{np.mean(processed_dr):.4f} ± {np.std(processed_dr):.4f}",
@@ -181,16 +191,18 @@ class AblationStudy:
                 'modification_num': f"{np.mean(modification_num):.4f} ± {np.std(modification_num):.4f}",
                 'wasserstein_distance': f"{np.mean(wasserstein_distance):.4f} ± {np.std(wasserstein_distance):.4f}",
             }
+
             processed_results = pd.DataFrame(processed_stats, index=[self.dataset_name]).T
 
-            processed_csv_file = os.path.join(save_dir, "ablation_study_1.csv")  # 存储路径
+            processed_csv_file = os.path.join(save_dir, "ablation_study_1.csv")
             if os.path.exists(processed_csv_file):
                 existing_df = pd.read_csv(processed_csv_file, index_col=0)
                 existing_df[self.dataset_name] = processed_results[self.dataset_name]
                 existing_df.to_csv(processed_csv_file)
             else:
                 processed_results.to_csv(processed_csv_file)
-            print(f"✅ {self.dataset_name} 处理后结果已保存到 {processed_csv_file}")
+
+            print(f"✅ Results for {self.dataset_name} have been saved to {processed_csv_file}")
 
     def run_ablation_study_2(self):
         '''
@@ -255,13 +267,10 @@ class AblationStudy:
                 matching_majority_label0 = NearestNeighborDataMatcher(X_labeled=X_train_majority_label0, X_unlabeled=X_train_minority_label0).match(n_neighbors=1)
                 matching_minority_label1 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label1, X_unlabeled=X_train_majority_label1).match(n_neighbors=1)
                 matching_minority_label0 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label0, X_unlabeled=X_train_majority_label0).match(n_neighbors=1)
-
-
                 X_change = pd.concat([X_train_majority_label1, X_train_majority_label0, X_train_minority_label1, X_train_minority_label0], axis=0)
                 x = X_change.copy()
                 # y = pd.concat([y_train_minority_label0, y_train_minority_label1, y_train_majority_label0, y_train_majority_label1], axis=0)
                 y = pd.concat([y_train_majority_label1, y_train_majority_label0, y_train_minority_label1, y_train_minority_label0], axis=0)
-                
                 q_majority_label1 = DataComposer(
                                 x_counterfactual=X_train_minority_label1.values,
                                 joint_prob=matching_majority_label1,
@@ -279,33 +288,22 @@ class AblationStudy:
                                 joint_prob=matching_minority_label0, 
                                 method="max").calculate_q()
                 X_base = np.vstack((q_majority_label1, q_majority_label0, q_minority_label1, q_minority_label0))
-
-                # 4. 在X_change的所有值中挑500个位置，把这些位置的值替换成X_base里的值
-                print(f'在X_change的所有值中挑{self.change_num}个位置的敏感属性，把这些位置的值从1替换成0，从0替换成1')
-                # 确保 self.sen_att_name 在 X_change 中
+                # 4. In all values of X_change, select change_num positions and replace them with values from X_base
+                print(f'Selecting {self.change_num} positions in the sensitive attribute of X_change and flipping the value from 1 to 0 or vice versa')
+                # Ensure that self.sen_att_name is in X_change
                 if self.sen_att_name not in X_change.columns:
-                    raise ValueError(f"敏感属性 {self.sen_att_name} 不在 X_change 中")
-
-                print(f'在 X_change 的 {self.sen_att_name} 列中挑 {self.change_num} 个位置，将 1 替换为 0，将 0 替换为 1')
-
-                # 获取敏感属性列的索引
-                sensitive_col_indices = X_change.index  # 获取 X_change 的真实索引
-
-                # 生成随机索引
-                random_indices = np.random.choice(sensitive_col_indices, self.change_num, replace=False)  # 选定行索引
-
-                # 逐个翻转 1 ↔ 0
+                    raise ValueError(f"The sensitive attribute {self.sen_att_name} is not present in X_change")
+                # Get indices of the sensitive attribute column
+                sensitive_col_indices = X_change.index  # Get real indices of X_change
+                # Generate random indices
+                random_indices = np.random.choice(sensitive_col_indices, self.change_num, replace=False)  # Selected row indices
+                # Flip values 1 ↔ 0
                 X_change.loc[random_indices, self.sen_att_name] = 1 - X_change.loc[random_indices, self.sen_att_name]
-
-                # 计算修改了多少个值
+                # Count how many values have been modified
                 diff_count = np.sum(X_change[self.sen_att_name].values != x[self.sen_att_name].values)
-
-                # 输出修改信息
-                print(f"成功修改了 {diff_count} 个 {self.sen_att_name} 值")
-
-
-
-                # 初始化 fairness_measure中需要使用的变量
+                # Print modification info
+                print(f"Successfully modified {diff_count} values of {self.sen_att_name}")
+                # Initialize variables needed in fairness_measure
                 sen_att_name = [self.sen_att_name]
                 sen_att = [X_val.columns.get_loc(name) for name in sen_att_name]
                 priv_val = [1]
@@ -315,13 +313,9 @@ class AblationStudy:
                 # Step 6: Train and evaluate model            
                 model_new = XGBClassifier()
                 model_new.fit(X_change, y)
-
                 # accuracy, dr, dp, eo, pqp = self._run_evaluation_np(model, X_val_repair, y_val)
                 accuracy, dr, dp, eo, pqp = self._run_evaluation_pd(model_new, X_val, y_val)
-
                 wasserstein_scores = compute_wasserstein_fidelity(X_change.values, x.values)
-
-
                 processed_accuracy.append(accuracy)
                 processed_dr.append(dr)
                 processed_dp.append(dp)
@@ -329,10 +323,8 @@ class AblationStudy:
                 processed_pqp.append(pqp)
                 modification_num.append(diff_count)
                 wasserstein_distance.append(wasserstein_scores)
-
-            
             save_dir = "saved_results/ablation_study"
-            os.makedirs(save_dir, exist_ok=True)  # 自动创建目录（如果不存在）
+            os.makedirs(save_dir, exist_ok=True)  # Automatically create directory if it doesn't exist
             # Save PROCESSED results of current dataset in a csv file
             processed_stats = {
                 'processed_accuracy': f"{np.mean(processed_accuracy):.4f} ± {np.std(processed_accuracy):.4f}",
@@ -344,22 +336,19 @@ class AblationStudy:
                 'wasserstein_distance': f"{np.mean(wasserstein_distance):.4f} ± {np.std(wasserstein_distance):.4f}",
             }
             processed_results = pd.DataFrame(processed_stats, index=[self.dataset_name]).T
-
-            processed_csv_file = os.path.join(save_dir, "ablation_study_2.csv")  # 存储路径
+            processed_csv_file = os.path.join(save_dir, "ablation_study_2.csv")  # Storage path
             if os.path.exists(processed_csv_file):
                 existing_df = pd.read_csv(processed_csv_file, index_col=0)
                 existing_df[self.dataset_name] = processed_results[self.dataset_name]
                 existing_df.to_csv(processed_csv_file)
             else:
                 processed_results.to_csv(processed_csv_file)
-            print(f"✅ {self.dataset_name} 处理后结果已保存到 {processed_csv_file}")
+            print(f"✅ Results for {self.dataset_name} have been saved to {processed_csv_file}")
 
     def run_ablation_study_3(self):
         '''
         Random Background Data Modification: Randomly selecting the corresponding number of values from the background data to modify the original dataset.
-        
-        因为在做ablation study1的时候，我们发现会出现大量点被替换成相同的值，所以我们把self.change_num设置得比较高，但是最终在代码中加一句条件语句，如果被替换的值和原来的值相同，就不替换。
-
+        Because during ablation study 1, we found that many points were replaced with the same values, we set self.change_num higher. However, in the code, we added a conditional statement to ensure replacement only occurs if the new value differs from the original.
         '''
         for i in ['german_credit', 'compas', 'compas4race', 'adult', 'default_credit', 'census_income_kdd']:
             self.dataset_name = i
@@ -380,7 +369,7 @@ class AblationStudy:
                 self.sen_att_name = 'sex'
                 self.target_name = 'two_year_recid'
                 self.change_num = 4000
-                self.priv =1
+                self.priv = 1
             elif self.dataset_name == 'compas4race':
                 self.sen_att_name = 'race'
                 self.target_name = 'two_year_recid'
@@ -418,36 +407,25 @@ class AblationStudy:
                 model.fit(X_train, y_train)
                 x = X_train.copy()
                 X_change = X_train.copy()
-                change_num = self.change_num
-
                 rows, cols = x.shape
-                
                 # Determine the number of points to modify
                 change_num = self.change_num
-                
                 # Create a list of all possible points (row, col)
                 all_points = [(i, j) for i in range(rows) for j in range(cols)]
-                
                 # Randomly select points to modify, ensuring they are unique
                 selected_points = random.sample(all_points, change_num)
-                
                 # Modify each selected point
                 for row, col in selected_points:
                     # Get all row indices except the current one
                     other_rows = [i for i in range(rows) if i != row]
-                    
                     # Randomly select a row different from the current one
                     random_row = random.choice(other_rows)
-                    
                     # Replace the value at the selected point with a value from the same column but different row
                     X_change.iloc[row, col] = x.iloc[random_row, col]
-
                 diff_count = np.sum(X_change.values != x.values)
-                print(f'要替换{self.change_num}个值')
-                print(f'实际替换了{diff_count}个值')
-
-
-                # 初始化 fairness_measure中需要使用的变量
+                print(f'Expected to replace {self.change_num} values')
+                print(f'Actually replaced {diff_count} values')
+                # Initialize variables needed in fairness_measure
                 sen_att_name = [self.sen_att_name]
                 sen_att = [X_val.columns.get_loc(name) for name in sen_att_name]
                 priv_val = [1]
@@ -457,13 +435,9 @@ class AblationStudy:
                 # Step 6: Train and evaluate model            
                 model_new = XGBClassifier()
                 model_new.fit(X_change, y_train)
-
                 # accuracy, dr, dp, eo, pqp = self._run_evaluation_np(model, X_val_repair, y_val)
                 accuracy, dr, dp, eo, pqp = self._run_evaluation_pd(model_new, X_val, y_val)
-
                 wasserstein_scores = compute_wasserstein_fidelity(X_change.values, x.values)
-
-
                 processed_accuracy.append(accuracy)
                 processed_dr.append(dr)
                 processed_dp.append(dp)
@@ -472,101 +446,76 @@ class AblationStudy:
                 modification_num.append(diff_count)
                 wasserstein_distance.append(wasserstein_scores)
 
-            
-            save_dir = "saved_results/ablation_study"
-            os.makedirs(save_dir, exist_ok=True)  # 自动创建目录（如果不存在）
-            # Save PROCESSED results of current dataset in a csv file
-            processed_stats = {
-                'processed_accuracy': f"{np.mean(processed_accuracy):.4f} ± {np.std(processed_accuracy):.4f}",
-                'processed_dr': f"{np.mean(processed_dr):.4f} ± {np.std(processed_dr):.4f}",
-                'processed_dp': f"{np.mean(processed_dp):.4f} ± {np.std(processed_dp):.4f}",
-                'processed_eo': f"{np.mean(processed_eo):.4f} ± {np.std(processed_eo):.4f}",
-                'processed_pqp': f"{np.mean(processed_pqp):.4f} ± {np.std(processed_pqp):.4f}",
-                'modification_num': f"{np.mean(modification_num):.4f} ± {np.std(modification_num):.4f}",
-                'wasserstein_distance': f"{np.mean(wasserstein_distance):.4f} ± {np.std(wasserstein_distance):.4f}",
-            }
-            processed_results = pd.DataFrame(processed_stats, index=[self.dataset_name]).T
+        def _run_evaluation_pd(self, model, X_val:pd.DataFrame, y_val:pd.Series):
+            sen_att_name = [self.sen_att_name]
+            sen_att = [X_val.columns.get_loc(name) for name in sen_att_name]
+            priv_val = [self.priv]
+            unpriv_dict = [list(set(X_val.values[:, sa])) for sa in sen_att]
+            for sa_list, pv in zip(unpriv_dict, priv_val):
+                sa_list.remove(pv)
+            fairness_explainer_original = FairnessExplainer(
+                    model=model, 
+                    sen_att=sen_att, 
+                    priv_val=priv_val, 
+                    unpriv_dict=unpriv_dict,
+                    fairshap_base='DR'
+                    )
+            # calculate fairness value on val data(test data)
+            y_pred = model.predict(X_val)
+            original_accuracy = accuracy_score(y_val, y_pred)
+            original_DR = fairness_value_function(sen_att, priv_val, unpriv_dict, X_val.values, model)
 
-            processed_csv_file = os.path.join(save_dir, "ablation_study_3.csv")  # 存储路径
-            if os.path.exists(processed_csv_file):
-                existing_df = pd.read_csv(processed_csv_file, index_col=0)
-                existing_df[self.dataset_name] = processed_results[self.dataset_name]
-                existing_df.to_csv(processed_csv_file)
+            priv_idx = X_val[self.sen_att_name].to_numpy().astype(bool)
+            g1_Cm, g0_Cm = marginalised_np_mat(y=y_val, y_hat=y_pred, pos_label=1, priv_idx=priv_idx)
+            original_DP = grp1_DP(g1_Cm, g0_Cm)[0]
+            original_EO = grp2_EO(g1_Cm, g0_Cm)[0]
+            original_PQP = grp3_PQP(g1_Cm, g0_Cm)[0]
+            return original_accuracy, original_DR, original_DP, original_EO, original_PQP
+        
+        def _split_into_majority_minority_label0_label1(self, X_train:pd.DataFrame, y_train:pd.Series):
+            '''
+            This function is used to divide the dataset into majority group and minority group
+
+            Arg:
+            - X: pd.DataFrame, the input data
+            - y: pd.Series, the input labels
+            - sen_att_name: str, the sensitive attribute name
+
+            Return:
+            - X_majority: pd.DataFrame, the majority group data
+            - y_majority: pd.Series, the majority group labels
+            - X_minority: pd.DataFrame, the minority group data
+            - y_minority: pd.Series, the minority group labels
+            '''
+            group_division = X_train[self.sen_att_name].value_counts()
+            '''split X_train into two groups -- majority and minority'''
+            if group_division[0] > group_division[1]:  #
+                majority = X_train[self.sen_att_name] == 0
+                X_train_majority = X_train[majority]
+                y_train_majority = y_train[majority]
+                minority = X_train[self.sen_att_name] == 1
+                X_train_minority = X_train[minority]
+                y_train_minority = y_train[minority]
+
             else:
-                processed_results.to_csv(processed_csv_file)
-            print(f"✅ {self.dataset_name} 处理后结果已保存到 {processed_csv_file}")
+                majority = X_train[self.sen_att_name] == 1
+                X_train_majority = X_train[majority]
+                y_train_majority = y_train[majority]
+                minority = X_train[self.sen_att_name] == 0
+                X_train_minority = X_train[minority]
+                y_train_minority = y_train[minority]
 
+            y_train_majority_label1 = y_train_majority[y_train_majority == 1]
+            y_train_majority_label0 = y_train_majority[y_train_majority == 0]
+            y_train_minority_label1 = y_train_minority[y_train_minority == 1]
+            y_train_minority_label0 = y_train_minority[y_train_minority == 0]
 
-    def _run_evaluation_pd(self, model, X_val:pd.DataFrame, y_val:pd.Series):
-        sen_att_name = [self.sen_att_name]
-        sen_att = [X_val.columns.get_loc(name) for name in sen_att_name]
-        priv_val = [self.priv]
-        unpriv_dict = [list(set(X_val.values[:, sa])) for sa in sen_att]
-        for sa_list, pv in zip(unpriv_dict, priv_val):
-            sa_list.remove(pv)
-        fairness_explainer_original = FairnessExplainer(
-                model=model, 
-                sen_att=sen_att, 
-                priv_val=priv_val, 
-                unpriv_dict=unpriv_dict,
-                fairshap_base='DR'
-                )
-        # calculate fairness value on val data(test data)
-        y_pred = model.predict(X_val)
-        original_accuracy = accuracy_score(y_val, y_pred)
-        original_DR = fairness_value_function(sen_att, priv_val, unpriv_dict, X_val.values, model)
+            X_train_majority_label0 = X_train_majority.loc[y_train_majority_label0.index]
+            X_train_majority_label1 = X_train_majority.loc[y_train_majority_label1.index]
+            X_train_minority_label0 = X_train_minority.loc[y_train_minority_label0.index]
+            X_train_minority_label1 = X_train_minority.loc[y_train_minority_label1.index]
 
-        priv_idx = X_val[self.sen_att_name].to_numpy().astype(bool)
-        g1_Cm, g0_Cm = marginalised_np_mat(y=y_val, y_hat=y_pred, pos_label=1, priv_idx=priv_idx)
-        original_DP = grp1_DP(g1_Cm, g0_Cm)[0]
-        original_EO = grp2_EO(g1_Cm, g0_Cm)[0]
-        original_PQP = grp3_PQP(g1_Cm, g0_Cm)[0]
-        return original_accuracy, original_DR, original_DP, original_EO, original_PQP
-    
-    def _split_into_majority_minority_label0_label1(self, X_train:pd.DataFrame, y_train:pd.Series):
-        '''
-        This function is used to divide the dataset into majority group and minority group
-
-        Arg:
-        - X: pd.DataFrame, the input data
-        - y: pd.Series, the input labels
-        - sen_att_name: str, the sensitive attribute name
-
-        Return:
-        - X_majority: pd.DataFrame, the majority group data
-        - y_majority: pd.Series, the majority group labels
-        - X_minority: pd.DataFrame, the minority group data
-        - y_minority: pd.Series, the minority group labels
-        '''
-        group_division = X_train[self.sen_att_name].value_counts()
-        '''把X_train分成majority和minority两个部分'''
-        if group_division[0] > group_division[1]:  #
-            majority = X_train[self.sen_att_name] == 0
-            X_train_majority = X_train[majority]
-            y_train_majority = y_train[majority]
-            minority = X_train[self.sen_att_name] == 1
-            X_train_minority = X_train[minority]
-            y_train_minority = y_train[minority]
-
-        else:
-            majority = X_train[self.sen_att_name] == 1
-            X_train_majority = X_train[majority]
-            y_train_majority = y_train[majority]
-            minority = X_train[self.sen_att_name] == 0
-            X_train_minority = X_train[minority]
-            y_train_minority = y_train[minority]
-
-        y_train_majority_label1 = y_train_majority[y_train_majority == 1]
-        y_train_majority_label0 = y_train_majority[y_train_majority == 0]
-        y_train_minority_label1 = y_train_minority[y_train_minority == 1]
-        y_train_minority_label0 = y_train_minority[y_train_minority == 0]
-
-        X_train_majority_label0 = X_train_majority.loc[y_train_majority_label0.index]
-        X_train_majority_label1 = X_train_majority.loc[y_train_majority_label1.index]
-        X_train_minority_label0 = X_train_minority.loc[y_train_minority_label0.index]
-        X_train_minority_label1 = X_train_minority.loc[y_train_minority_label1.index]
-
-        return X_train_majority_label0, y_train_majority_label0, X_train_majority_label1, y_train_majority_label1, X_train_minority_label0, y_train_minority_label0, X_train_minority_label1, y_train_minority_label1 
+            return X_train_majority_label0, y_train_majority_label0, X_train_majority_label1, y_train_majority_label1, X_train_minority_label0, y_train_minority_label0, X_train_minority_label1, y_train_minority_label1 
 
 def fairness_value_function(sen_att, priv_val, unpriv_dict, X, model):
     X_disturbed = perturb_numpy_ver(
@@ -581,7 +530,7 @@ def fairness_value_function(sen_att, priv_val, unpriv_dict, X, model):
     return np.mean(np.abs(fx - fx_q))
 
 def compute_wasserstein_fidelity(original_data: np.ndarray, augmented_data: np.ndarray):
-    assert original_data.shape == augmented_data.shape, "数据形状必须匹配"
+    assert original_data.shape == augmented_data.shape, "must have the same shape"
     
     num_features = original_data.shape[1]
     wasserstein_scores = [
@@ -648,17 +597,10 @@ def grp3_PQP(g1_Cm, g0_Cm):
   g0 = zero_division(g0_Cm[0], g0)
   return abs(g0 - g1), float(g1), float(g0)
 
-# 定义计算指标的函数
-def calculate_metrics(y_test, y_pred, pos=1):
 
+def calculate_metrics(y_test, y_pred, pos=1):
     tp, fp, fn, tn = contingency_tab_bi(y_test, y_pred, pos)
-    # 召回率
     recall = tp / (tp + fn) if (tp + fn) != 0 else 0
-    
-    # 精确率
     precision = tp / (tp + fp) if (tp + fp) != 0 else 0
-    
-    # 充分性（根据新定义）
     sufficiency = tn / (tn + fp) if (tn + fp) != 0 else 0
-    
     return recall, precision, sufficiency

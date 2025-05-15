@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import savgol_filter  # 用于平滑曲线
+from scipy.signal import savgol_filter  # For curve smoothing
 
 def plot_fairness_improvement(
     folds,
@@ -16,23 +16,24 @@ def plot_fairness_improvement(
     figsize=None,  
     fill_alpha=0.2,
     fill_color='b',
-    smooth_window=15,  # 滑动窗口大小（用于平滑曲线）
-    smooth_polyorder=3 # 多项式拟合阶数（用于 Savitzky-Golay 滤波）
+    smooth_window=15,  # Size of sliding window (for smoothing)
+    smooth_polyorder=3 # Polynomial order for Savitzky-Golay filter
 ):
     """
-    绘制 1×N 子图，每个子图展示 Accuracy、DR、DP、EO、PQP 指标的
-    “相对于原始指标值的改善差值”随 action_number 变化的均值±标准差曲线。
+    Plot 1×N subplots showing the difference between new metric values and original values 
+    (original_accuracy, original_DR, etc.) for Accuracy, DR, DP, EO, and PQP,
+    as a function of action_number with mean ± standard deviation.
 
-    主要优化：
-    1) 计算滑动平均，减少剧烈波动，使曲线更平滑。
-    2) 使用 Savitzky-Golay 滤波器，减少噪声但保留趋势。
-    3) 适当调整透明度，提升可读性。
-    4) 自动调整 `ylim`，避免极端值影响观察。
-
+    Main improvements:
+    1) Compute moving average to reduce sharp fluctuations and make curves smoother.
+    2) Use Savitzky-Golay filter to reduce noise while preserving trend.
+    3) Adjust transparency for better readability.
+    4) Automatically adjust ylim to avoid extreme values from affecting visualization.
     """
+
     num_folds = len(folds)
     if not (len(original_accuracy) == len(original_DR) == len(original_DP) == len(original_EO) == len(original_PQP) == num_folds):
-        raise ValueError("original_accuracy, original_DR, original_DP, original_EO, original_PQP 长度必须与 folds 相同。")
+        raise ValueError("original_accuracy, original_DR, original_DP, original_EO, original_PQP must have the same length as folds.")
 
     measures_info = [
         ("Accuracy", "new_accuracy", original_accuracy),
@@ -59,7 +60,7 @@ def plot_fairness_improvement(
 
         max_actions = [df['action_number'].max() for df in folds if not df.empty]
         if len(max_actions) == 0:
-            print(f"警告：所有 fold 的 {measure_col} 数据都是空的或无效，跳过该子图。")
+            print(f"Warning: All folds are empty or invalid for {measure_col}, skipping this subplot.")
             continue
         overall_max_action = int(np.nanmax(max_actions))
 
@@ -82,13 +83,13 @@ def plot_fairness_improvement(
 
         action_range = sorted(measure_values.keys())
         if len(action_range) == 0:
-            print(f"警告：{measure_name} 未找到满足 stop_when_no_data 的有效 action_number，跳过该子图。")
+            print(f"Warning: No valid action numbers found for {measure_name} that meet the stop_when_no_data threshold. Skipping.")
             continue
 
         means = np.array([np.mean(measure_values[action]) for action in action_range])
         stds = np.array([np.std(measure_values[action]) for action in action_range])
 
-        # 使用 Savitzky-Golay 滤波器进行平滑
+        # Smooth the curve using Savitzky-Golay filter
         if len(means) > smooth_window:
             smoothed_means = savgol_filter(means, window_length=smooth_window, polyorder=smooth_polyorder)
         else:
@@ -97,13 +98,13 @@ def plot_fairness_improvement(
         ax = fig.add_subplot(num_rows, num_cols, i)
         ax.set_title(f"{measure_name} Improvement from Original")
 
-        # baseline 参考线
+        # Baseline reference line
         ax.axhline(y=baseline, color='black', linewidth=2, linestyle='-', label=f'Baseline (y={baseline})')
 
-        # 平滑后的均值曲线
+        # Smoothed mean curve
         ax.plot(action_range, smoothed_means, color=fill_color, label=f'Mean {measure_name} Gap')
 
-        # 均值 ± 标准差
+        # Shaded area for ±1 standard deviation
         ax.fill_between(
             action_range,
             smoothed_means - stds,
@@ -118,7 +119,7 @@ def plot_fairness_improvement(
         ax.grid(True)
         ax.legend()
 
-        # 限制 Y 轴范围，避免极端值影响可视化
+        # Limit Y-axis range to avoid extreme values affecting visualization
         ax.set_ylim([min(smoothed_means - stds) * 1.2, max(smoothed_means + stds) * 1.2])
 
     plt.subplots_adjust(wspace=0.3)

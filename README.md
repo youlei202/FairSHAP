@@ -1,1 +1,1 @@
-# This is official repository of 'Leveraging Shapley Values for Fairness-Aware Data Augmentation'
+# This is official repository of 'FairSHAP: Preprocessing for Fairness Through Attribution-Based Data Augmentation'

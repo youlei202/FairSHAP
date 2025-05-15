@@ -4,12 +4,12 @@ from src.experiments.experiment import Experiment
 from src.experiments.experiment_eo import Experiment as ExperimentEO
 from src.experiments.experiment_new_eo import Experiment as ExperimentNewEO
 import pandas as pd
-# 假设 model 是你的模型
+
 
 
 def evaluate_model(model, X_train:pd.DataFrame, y_train:pd.Series, num_folds, dataset_name, fairshap_base='DR',matching_method='OT', thresh=0.05):  
-    kf = KFold(n_splits=num_folds, shuffle=True, random_state=1)  # 5-fold 交叉验证
-    scores = []  # 存储每次验证的评估指标（如 accuracy）
+    kf = KFold(n_splits=num_folds, shuffle=True, random_state=1)  # 5-fold cross-validation
+    scores = []  # Store evaluation metrics (e.g., accuracy) for each fold
     i = 1
 
     for train_index, val_index in kf.split(X_train):
@@ -19,10 +19,10 @@ def evaluate_model(model, X_train:pd.DataFrame, y_train:pd.Series, num_folds, da
         X_train_fold, X_val_fold = X_train.iloc[train_index], X_train.iloc[val_index]
         y_train_fold, y_val_fold = y_train.iloc[train_index], y_train.iloc[val_index]
         
-        # 训练模型
+        # Train the model
         model.fit(X_train_fold, y_train_fold)
         
-        # 评估模型（这里假设用准确率评估）
+        # evaluate the model
         if fairshap_base == 'DR' or fairshap_base == 'DP':
             experiment = Experiment(model=model, X_train=X_train_fold, y_train=y_train_fold, X_test=X_val_fold, y_test=y_val_fold, dataset_name=dataset_name, fairshap_base=fairshap_base, matching_method=matching_method)
             experiment.run(ith_fold=i, threshold=thresh)
@@ -33,9 +33,9 @@ def evaluate_model(model, X_train:pd.DataFrame, y_train:pd.Series, num_folds, da
 
 
     pass
-    # 计算 5 次评估指标的平均值
+    # Calculate the average of the evaluation metrics over all folds
     mean_score = np.mean(scores)
-    print(f"5-Fold 交叉验证的平均得分: {mean_score:.4f}")
+    print(f"Average score across {num_folds}-Fold Cross Validation: {mean_score:.4f}")
     return mean_score
 
 
@@ -57,7 +57,7 @@ if __name__ == '__main__':
     X = df.drop('Risk', axis=1)
     y = df['Risk']
 
-    model = XGBClassifier()  # 可以替换为 RandomForestClassifier() 等其他模型
+    model = XGBClassifier()  # XGboost can be replaced by RandomForestClassifier() tc.
     
     evaluate_model(model=model, X_train=X, y_train=y, num_folds=5, dataset_name='german_credit')
 

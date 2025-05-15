@@ -1,1 +1,1 @@
-from src.attribution.pshap import FairnessExplainer
+from src.attribution.fairshap import FairnessExplainer

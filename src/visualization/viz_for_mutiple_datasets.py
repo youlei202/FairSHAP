@@ -16,7 +16,8 @@ def plot_multi_dataset_fairness_improvement(
     smooth_polyorder=2
 ):
     """
-    生成符合 ICLR/ICML 风格的公平性改进折线图，去除上边界和右边界，并保存为 PNG。
+    Generate fairness improvement line plots in the style of ICLR/ICML.
+    Remove top and right spines and save the figure as a PNG file.
     """
     measures_info = [
         ("Accuracy", "new_accuracy"),
@@ -29,7 +30,7 @@ def plot_multi_dataset_fairness_improvement(
     num_datasets = len(datasets_info)
     num_metrics = len(measures_info)
     
-    # 自动确定图像大小
+    # Automatically determine figure size
     if figsize is None:
         figsize = (num_metrics * 3.5, num_datasets * 2.5)
     
@@ -78,7 +79,7 @@ def plot_multi_dataset_fairness_improvement(
             means = np.array([np.mean(measure_values[action]) for action in action_range])
             stds = np.array([np.std(measure_values[action]) for action in action_range])
             
-            # 平滑曲线
+            # Smooth the curve
             if len(means) > smooth_window:
                 smoothed_means = savgol_filter(means, window_length=smooth_window, polyorder=smooth_polyorder)
             else:
@@ -90,7 +91,7 @@ def plot_multi_dataset_fairness_improvement(
             ax.plot(action_range, smoothed_means, color=color, linewidth=3)
             ax.fill_between(action_range, smoothed_means - stds, smoothed_means + stds, alpha=fill_alpha, color=color)
             
-            # 设置标题和标签
+            # Set title and labels
             if dataset_idx == 0:
                 ax.set_title(f"{measure_name}", fontsize=12)
             
@@ -100,11 +101,7 @@ def plot_multi_dataset_fairness_improvement(
             if dataset_idx == num_datasets - 1:
                 ax.set_xlabel("Modification Number", fontsize=10)
             
-            # # 移除上边界和右边界，符合 ICLR/ICML 风格
-            # ax.spines["top"].set_visible(False)
-            # ax.spines["right"].set_visible(False)
-            
-            # 添加网格
+            # Add grid
             ax.grid(True, linestyle='--', alpha=0.7)
             
             y_min = min(smoothed_means - stds) * 1.2 if min(smoothed_means - stds) < 0 else min(smoothed_means - stds) * 0.8
@@ -114,13 +111,12 @@ def plot_multi_dataset_fairness_improvement(
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.subplots_adjust(hspace=0.3, wspace=0.2)
     
-    # 保存 PNG 文件
+    # Save as PNG file
     output_filename = "fairness_improvement_plot.png"
     fig.savefig(output_filename, dpi=300, bbox_inches="tight")
     plt.close(fig)
     
     return output_filename
-
 
 
 def extract_original_values(fold):
@@ -131,6 +127,7 @@ def extract_original_values(fold):
     original_EO = fold.loc[0, 'new_EO']
     original_PQP = fold.loc[0, 'new_PQP']
     return original_accuracy, original_DR, original_DP, original_EO, original_PQP
+
 
 def load_dataset_folds(dataset_path, fold_pattern, num_folds=5):
     """Load all folds for a dataset and prepare data for visualization."""
@@ -170,11 +167,11 @@ def load_dataset_folds(dataset_path, fold_pattern, num_folds=5):
         'original_PQP': original_PQP
     }
 
+
 # Example usage
 if __name__ == "__main__":
     # List of datasets to process
     datasets = [
-
         {
             'name': 'German Credit',
             'path': 'saved_results/german_credit/',
@@ -201,7 +198,7 @@ if __name__ == "__main__":
             'pattern': 'saved_results/census_income/fairSHAP-DR_0.05_NN_{}-fold_results.csv'
         },
         {
-            'name': 'Default credit',
+            'name': 'Default Credit',
             'path': 'saved_results/default_credit/',
             'pattern': 'saved_results/default_credit/fairSHAP-DR_0.05_NN_{}-fold_results.csv'
         }
@@ -226,6 +223,3 @@ if __name__ == "__main__":
         smooth_window=50, 
         smooth_polyorder=1
     )
-    
-    # plt.savefig('multi_dataset_fairness_comparison.png', dpi=300, bbox_inches='tight')
-    # plt.show()
