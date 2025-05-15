@@ -88,12 +88,11 @@ class Experiment:
         self.ith_fold = ith_fold
         print(f"1. Split the {self.dataset_name} dataset into majority group and minority group according to the number of sensitive attribute, besides split by label 0 and label 1")
         X_train_majority_label0, y_train_majority_label0, X_train_majority_label1, y_train_majority_label1, X_train_minority_label0, y_train_minority_label0, X_train_minority_label1, y_train_minority_label1 = self._split_into_majority_minority_label0_label1()
-
         print(f'X_train_majority_label0 shape: {X_train_majority_label0.shape}')
         print(f'X_train_majority_label1 shape: {X_train_majority_label1.shape}')
         print(f'X_train_minority_label0 shape: {X_train_minority_label0.shape}')
         print(f'X_train_minority_label1 shape: {X_train_minority_label1.shape}')
-        print('2. 初始化FairnessExplainer')
+        print('2. Initialize FairnessExplainer')
         sen_att_name = [self.sensitive_attri]
         sen_att = [self.X_test.columns.get_loc(name) for name in sen_att_name]
         priv_val = [1]
@@ -107,10 +106,9 @@ class Experiment:
                 unpriv_dict=unpriv_dict,
                 fairshap_base=self.fairshap_base
                 )
-        
-        print('--------接下来先对minority group进行修改--------')
-        print('3(a). 将X_train_minority_label0与X_train_majority_label0进行匹配')
-        print('3(b). 将X_train_minority_label1与X_train_majority_label1进行匹配')
+        print('--------Next, we will modify the minority group--------')
+        print('3(a). Match X_train_minority_label0 with X_train_majority_label0')
+        print('3(b). Match X_train_minority_label1 with X_train_majority_label1')
         if self.matching_method == 'NN':
             matching_minority_label0 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label0, X_unlabeled=X_train_majority_label0).match(n_neighbors=1)
             matching_minority_label1 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label1, X_unlabeled=X_train_majority_label1).match(n_neighbors=1)
@@ -119,7 +117,7 @@ class Experiment:
             matching_minority_label1 = OptimalTransportPolicy(X_labeled=X_train_minority_label1.values, X_unlabeled=X_train_majority_label1.values).match()
         else:
             raise ValueError('The matching method is not supported')
-        print('4(a). 使用FairSHAP, 从 X_train_majority_label0中找到合适的值替换X_train_minority_label0中的数据')
+        print('4(a). Use FairSHAP to find suitable values from X_train_majority_label0 to replace data in X_train_minority_label0')
         fairness_shapley_minority_value_label0 = fairness_explainer_original.shap_values(
                                     X = X_train_minority_label0.values,
                                     Y = y_train_minority_label0.values,
@@ -130,7 +128,7 @@ class Experiment:
                                 )
         X_change_minority_label0 = X_train_minority_label0.copy()
         X_base_minority_label0 = X_train_majority_label0
-        print('4(b). 使用FairSHAP, 从 X_train_majority_label1中找到合适的值替换X_train_minority_label1中的数据')
+        print('4(b). Use FairSHAP to find suitable values from X_train_majority_label1 to replace data in X_train_minority_label1')
         fairness_shapley_minority_value_label1 = fairness_explainer_original.shap_values(
                                     X = X_train_minority_label1.values,
                                     Y = y_train_minority_label1.values,
@@ -141,10 +139,10 @@ class Experiment:
                                 )
         X_change_minority_label1 = X_train_minority_label1.copy()
         X_base_minority_label1 = X_train_majority_label1
-        print('5. 计算出varphi和q')
+        print('5. Calculate varphi and q')
         fairness_shapley_minority_value = np.vstack((fairness_shapley_minority_value_label0, fairness_shapley_minority_value_label1))
         non_zero_count_minority = np.sum(fairness_shapley_minority_value > threshold)
-        print(f"在X_train_minority中shapely value中大于{threshold}的值的个数有: {non_zero_count_minority}")
+        print(f"There are {non_zero_count_minority} SHAP values greater than {threshold} in X_train_minority")
         q_minority_label0 = DataComposer(
                         x_counterfactual=X_base_minority_label0.values, 
                         joint_prob=matching_minority_label0, 
@@ -154,10 +152,9 @@ class Experiment:
                         joint_prob=matching_minority_label1, 
                         method="max").calculate_q()
         q_minority = np.vstack((q_minority_label0, q_minority_label1))
-
-        print('--------接下来对majority group进行修改--------')
-        print('3(a). 将X_train_majority_label0与X_train_minority_label0进行匹配')
-        print('3(b). 将X_train_majority_label1与X_train_minority_label1进行匹配')
+        print('--------Next, we will modify the majority group--------')
+        print('3(a). Match X_train_majority_label0 with X_train_minority_label0')
+        print('3(b). Match X_train_majority_label1 with X_train_minority_label1')
         if self.matching_method == 'NN':
             matching_majority_label0 = NearestNeighborDataMatcher(X_labeled=X_train_majority_label0, X_unlabeled=X_train_minority_label0).match(n_neighbors=1)       
             matching_majority_label1 = NearestNeighborDataMatcher(X_labeled=X_train_majority_label1, X_unlabeled=X_train_minority_label1).match(n_neighbors=1)
@@ -166,8 +163,7 @@ class Experiment:
             matching_majority_label1 = OptimalTransportPolicy(X_labeled=X_train_majority_label1.values, X_unlabeled=X_train_minority_label1.values).match()
         else:
             raise ValueError('The matching method is not supported')
-
-        print('4(a). 使用fairshap, 从 X_train_minority_label0中找到合适的值替换X_train_majority_label0中的数据')
+        print('4(a). Use FairSHAP to find suitable values from X_train_minority_label0 to replace data in X_train_majority_label0')
         fairness_shapley_majority_value_label0 = fairness_explainer_original.shap_values(
                                     X = X_train_majority_label0.values,
                                     Y = y_train_majority_label0.values,
@@ -178,7 +174,7 @@ class Experiment:
                                 )
         X_change_majority_label0 = X_train_majority_label0.copy()
         X_base_majority_label0 = X_train_minority_label0
-        print('4(b). 使用fairshap, 从 X_train_minority_label1中找到合适的值替换X_train_majority_label1中的数据')
+        print('4(b). Use FairSHAP to find suitable values from X_train_minority_label1 to replace data in X_train_majority_label1')
         fairness_shapley_majority_value_label1 = fairness_explainer_original.shap_values(
                                     X = X_train_majority_label1.values,
                                     Y = y_train_majority_label1.values,
@@ -189,13 +185,11 @@ class Experiment:
                                 )  
         X_change_majority_label1 = X_train_majority_label1.copy()
         X_base_majority_label1 = X_train_minority_label1
-            
-        print('5. 计算出varphi和q')
-        # 筛选出shapley value大于0.1的值，其他值设为0，然后归一化
+        print('5. Calculate varphi and q')
+        # Select SHAP values greater than 0.1, set others to 0, then normalize
         fairness_shapley_majority_value = np.vstack((fairness_shapley_majority_value_label0, fairness_shapley_majority_value_label1))
         non_zero_count_majority =np.sum(fairness_shapley_majority_value > threshold)
-
-        print(f"在X_train_majority中shapely value中大于{threshold}的值的个数有: {non_zero_count_majority}")
+        print(f"There are {non_zero_count_majority} SHAP values greater than {threshold} in X_train_majority")
         q_majority_label0 = DataComposer(
                         x_counterfactual=X_base_majority_label0.values, 
                         joint_prob=matching_majority_label0, 
@@ -207,7 +201,6 @@ class Experiment:
         q_majority = np.vstack((q_majority_label0, q_majority_label1))
         fairness_shapley_value = np.vstack((fairness_shapley_minority_value, fairness_shapley_majority_value))
         # varphi = fix_negative_probabilities_select_larger(fairness_shapley_value)
-
         if self.fairshap_base == 'DR':
             varphi = np.where(fairness_shapley_value > threshold, fairness_shapley_value, 0)
         elif self.fairshap_base == 'DP' or self.fairshap_base == 'EO' or self.fairshap_base == 'PQP':
@@ -217,63 +210,39 @@ class Experiment:
         q = np.vstack((q_minority,q_majority))   # q_minority_label0 + q_minority_label1 + q_majority_label0 + q_majority_label1
         X_change = pd.concat([X_change_minority_label0, X_change_minority_label1, X_change_majority_label0, X_change_majority_label1], axis=0)
         non_zero_count = non_zero_count_majority + non_zero_count_minority
-
-        print('6. 计算original model在X_test上的accuracy, DR, DP, EO, PP')
+        print('6. Calculate accuracy, DR, DP, EO, PP of the original model on X_test')
         y_pred = self.model.predict(self.X_test)
         original_accuracy = accuracy_score(self.y_test, y_pred)
         original_DR = fairness_value_function(sen_att, priv_val, unpriv_dict, self.X_test.values, self.model)
-
         priv_idx = self.X_test[self.sensitive_attri].to_numpy().astype(bool)
         g1_Cm, g0_Cm = marginalised_np_mat(y=self.y_test, y_hat=y_pred, pos_label=1, priv_idx=priv_idx)
         original_DP = grp1_DP(g1_Cm, g0_Cm)[0]
         original_EO = grp2_EO(g1_Cm, g0_Cm)[0]
         original_PQP = grp3_PQP(g1_Cm, g0_Cm)[0]
-
-        # 计算指标
-        # original_recall, original_precision, original_sufficiency = calculate_metrics(self.y_test, y_pred, pos=1)
-
-        print(f'7. 开始整理minority部分的修改和majority部分的修改并且合并新数据,共修改{non_zero_count}个数据点, 使用new training set训练新模型')
+        print(f'7. Start organizing modifications for the minority and majority groups and merge the new data; a total of {non_zero_count} data points modified; train a new model using the new training set')
         values_range = np.arange(1, non_zero_count, self.gap)
-        # result_fairness_measures = {'DP':[], 'EO':[], 'PQP':[], 'DR':[]}
-        # result_accuracy = {'DP':[], 'EO':[], 'PQP':[], 'DR':[]}
-
         accuracy_results = []
         DR_results = []
         DP_results = []
         EO_results = []
         PQP_results = []
-        # recall_results = []
-        # precision_results = []
-        # sufficiency_results = []
-
         for action_number in values_range:
-            # Step 1: 将 varphi 的值和位置展开为一维
+            # Step 1: Flatten varphi values and positions into one dimension
             flat_varphi = [(value, row, col) for row, row_vals in enumerate(varphi)
                         for col, value in enumerate(row_vals)]
-            # Step 2: 按值降序排序
+            # Step 2: Sort by value in descending order
             flat_varphi_sorted = sorted(flat_varphi, key=lambda x: x[0], reverse=True)
-            # Step 3: 挑出前 action_number 个数的位置
+            # Step 3: Select the top action_number positions
             top_positions = flat_varphi_sorted[:action_number]
-            
-            # # 有change_group的时候记录结果的
-            # if action_number == non_zero_count-1:  
-            #     for value, row_idx, col_idx in top_positions:
-            #         before_value = self.X_train_majority.iloc[row_idx, col_idx]
-            #         after_value = q[row_idx, col_idx]
-            #         changed_value_info.append((col_idx, before_value, after_value))  # 存储修改的值的信息
-
-            # Step 4: 替换 X 中前三列的值为 S 中对应位置的值
+            # Step 4: Replace values in X_change at top positions
             for value, row_idx, col_idx in top_positions:
                 X_change.iloc[row_idx, col_idx] = q[row_idx, col_idx]
-
             x = X_change
             y = pd.concat([y_train_minority_label0, y_train_minority_label1, y_train_majority_label0, y_train_majority_label1], axis=0)
-
             # Step 6: Train the new model            
             model_new = XGBClassifier()
             model_new.fit(x, y)
-
-            # step7: 评估新模型在DR,DP,EO,PP上的表现
+            # Step 7: Evaluate the new model's performance on DR, DP, EO, PQP
             new_DR = fairness_value_function(sen_att, priv_val, unpriv_dict, self.X_test.values, model_new)
             y_hat = model_new.predict(self.X_test)
             y_test = self.y_test
@@ -282,52 +251,31 @@ class Experiment:
             new_DP = grp1_DP(g1_Cm, g0_Cm)[0]
             new_EO = grp2_EO(g1_Cm, g0_Cm)[0]
             new_PQP = grp3_PQP(g1_Cm, g0_Cm)[0]
-            # new_recall, new_precision, new_sufficiency = calculate_metrics(self.y_test, y_hat, pos=1)
-
             accuracy_results.append(new_accuracy)
             DR_results.append(new_DR)
             DP_results.append(new_DP)
             EO_results.append(new_EO)
             PQP_results.append(new_PQP)
-            # recall_results.append(new_recall)
-            # precision_results.append(new_precision)
-            # sufficiency_results.append(new_sufficiency)
-
-            # step8: 评估新模型在accuracy上的表现
-            # if after < self.original_Xtest_DR:
-            #     y_new_pred = model_new.predict(self.X_test)
-            #     accuracy_new = accuracy_score(self.y_test, y_new_pred)
-            #     fairness_accuracy_pairs.append((after, accuracy_new, action_number))  # Store both values as a tuple
-        
-        print('8. 保存结果到csv文件')
+        print('8. Save results to CSV file')
         df = pd.DataFrame({
-            "action_number": values_range,  # 直接使用 values_range
+            "action_number": values_range,  # Directly use values_range
             "new_accuracy": accuracy_results,
             "new_DR": DR_results,
             "new_DP": DP_results,
             "new_EO": EO_results,
             "new_PQP": PQP_results,
-            # 'new_recall': recall_results,
-            # 'new_precision': precision_results,
-            # 'new_sufficiency': sufficiency_results,
-
         })
-        # 在 DataFrame 的第一行添加 original 值
-        # df.loc[-1] = ["original", original_DR, original_DP, original_EO, original_PQP, original_recall, original_precision, original_sufficiency]  # 插入到第一行
-        df.loc[-1] = ["original", original_accuracy, original_DR, original_DP, original_EO, original_PQP]  # 插入到第一行
-        df.index = df.index + 1  # 重新索引
-        df = df.sort_index()  # 确保 original 行在最上面
-
+        df.loc[-1] = ["original", original_accuracy, original_DR, original_DP, original_EO, original_PQP]  # Insert as first row
+        df.index = df.index + 1  # Reindex
+        df = df.sort_index()  # Ensure the 'original' row is at the top
         dataset_folder = os.path.join('saved_results', self.dataset_name)
         os.makedirs(dataset_folder, exist_ok=True)
-
-        # 生成 CSV 文件名
+        # Generate CSV filename
         csv_filename = f"fairSHAP-{self.fairshap_base}_{threshold}_{self.matching_method}_{self.ith_fold}-fold_results.csv"
         csv_filepath = os.path.join(dataset_folder, csv_filename)
-
-        # 保存 CSV
+        # Save CSV
         df.to_csv(csv_filepath, index=False)
-        print(f"CSV 文件已保存：{csv_filepath}")
+        print(f"CSV file saved: {csv_filepath}")
 
 
 
@@ -348,7 +296,7 @@ class Experiment:
         - y_minority: pd.Series, the minority group labels
         '''
         group_division = self.X_train[self.sensitive_attri].value_counts()
-        '''把X_train分成majority和minority两个部分'''
+        '''split X_train into majority and minority'''
         if group_division[0] > group_division[1]:  #
             majority = self.X_train[self.sensitive_attri] == 0
             X_train_majority = self.X_train[majority]
@@ -467,52 +415,11 @@ def grp3_PQP(g1_Cm, g0_Cm):
   g0 = zero_division(g0_Cm[0], g0)
   return abs(g0 - g1), float(g1), float(g0)
 
-# 定义计算指标的函数
-def calculate_metrics(y_test, y_pred, pos=1):
 
+def calculate_metrics(y_test, y_pred, pos=1):
     tp, fp, fn, tn = contingency_tab_bi(y_test, y_pred, pos)
-    # 召回率
     recall = tp / (tp + fn) if (tp + fn) != 0 else 0
-    
-    # 精确率
-    precision = tp / (tp + fp) if (tp + fp) != 0 else 0
-    
-    # 充分性（根据新定义）
+    precision = tp / (tp + fp) if (tp + fp) != 0 else 0  
     sufficiency = tn / (tn + fp) if (tn + fp) != 0 else 0
-    
     return recall, precision, sufficiency
 
-# if __name__ == 'main':
-
-#     from data.unified_dataloader import load_dataset
-
-#     import pandas as pd
-#     import numpy as np
-#     from sklearn.model_selection import train_test_split
-#     from sklearn.linear_model import LogisticRegression
-#     from sklearn.ensemble import RandomForestClassifier
-#     from xgboost import XGBClassifier
-#     from sklearn.metrics import accuracy_score
-
-#     a, processed_german_credit = load_dataset('german_credit')
-#     '''German Credit dataset'''
-#     df = processed_german_credit.copy()
-#     X = df.drop('Risk', axis=1)
-#     y = df['Risk']
-
-#     # into 70% training and 30% testing
-#     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=1) 
-#     print(f'X_train shape: {X_train.shape}')
-#     print(f'X_test shape: {X_test.shape}')
-
-#     model = XGBClassifier()  # 可以替换为 RandomForestClassifier() 等其他模型
-#     model.fit(X_train,y_train)
-
-#     # 预测和评估
-#     y_pred = model.predict(X_test)
-#     accuracy = accuracy_score(y_test, y_pred)
-#     print(f'Accuracy: {accuracy}')
-
-#     # 实例化 Experiment 类  并运行
-#     experiment = Experiment(model=model, X_train=X_train, y_train=y_train, X_test=X_test, y_test=y_test, dataset_name='german_credit')
-#     experiment.run(ith_fold=1)

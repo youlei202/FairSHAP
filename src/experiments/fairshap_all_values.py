@@ -29,7 +29,7 @@ class FairSHAP:
         self.fairshap_base = fairshap_base
     def run_and_save_results(self):
         '''
-        Run the chosn SOTA method on all datasets and save the results in a csv file
+        Run the chosen SOTA method on all datasets and save the results in a CSV file
         '''
         for i in ['german_credit', 'compas', 'compas4race', 'adult', 'default_credit', 'census_income_kdd']:
             self.dataset_name = i
@@ -47,7 +47,7 @@ class FairSHAP:
             elif self.dataset_name == 'compas':
                 self.sen_att_name = 'sex'
                 self.target_name = 'two_year_recid'
-                self.priv =1
+                self.priv = 1
             elif self.dataset_name == 'compas4race':
                 self.sen_att_name = 'race'
                 self.target_name = 'two_year_recid'
@@ -64,13 +64,11 @@ class FairSHAP:
             if self.dataset_name == 'census_income_kdd':
                 processed_data = processed_data.sample(frac=0.1, random_state=25) 
             kf = KFold(n_splits=5, shuffle=True, random_state=1)  # 5-fold cross-validation
-
             original_accuracy = []
             original_dr = []
             original_dp = []
             original_eo = []
             original_pqp = []
-
             processed_accuracy = []
             processed_dr = []
             processed_dp = []
@@ -79,7 +77,6 @@ class FairSHAP:
             modification_num = []
             wasserstein_distance = []
             mmd_distance = []
-            
             for j, (train_index, val_index) in enumerate(kf.split(processed_data)):
                 print("-------------------------------------")
                 print(f"-------------{j}th fold----------------")
@@ -91,12 +88,11 @@ class FairSHAP:
                 model.fit(X_train, y_train)
                 print(f"1. Split the {self.dataset_name} dataset into majority group and minority group according to the number of sensitive attribute, besides split by label 0 and label 1")
                 X_train_majority_label0, y_train_majority_label0, X_train_majority_label1, y_train_majority_label1, X_train_minority_label0, y_train_minority_label0, X_train_minority_label1, y_train_minority_label1 = self._split_into_majority_minority_label0_label1(X_train=X_train, y_train=y_train)
-
                 print(f'X_train_majority_label0 shape: {X_train_majority_label0.shape}')
                 print(f'X_train_majority_label1 shape: {X_train_majority_label1.shape}')
                 print(f'X_train_minority_label0 shape: {X_train_minority_label0.shape}')
                 print(f'X_train_minority_label1 shape: {X_train_minority_label1.shape}')
-                print('2. 初始化FairnessExplainer')
+                print('2. Initialize FairnessExplainer')
                 sen_att_name = [self.sen_att_name]
                 sen_att = [X_val.columns.get_loc(name) for name in sen_att_name]
                 priv_val = [1]
@@ -110,10 +106,9 @@ class FairSHAP:
                         unpriv_dict=unpriv_dict,
                         fairshap_base=self.fairshap_base
                         )
-                
-                print('--------接下来先对minority group进行修改--------')
-                print('3(a). 将X_train_minority_label0与X_train_majority_label0进行匹配')
-                print('3(b). 将X_train_minority_label1与X_train_majority_label1进行匹配')
+                print('--------First, modify the minority group--------')
+                print('3(a). Match X_train_minority_label0 with X_train_majority_label0')
+                print('3(b). Match X_train_minority_label1 with X_train_majority_label1')
                 if self.matching_method == 'NN':
                     matching_minority_label0 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label0, X_unlabeled=X_train_majority_label0).match(n_neighbors=1)
                     matching_minority_label1 = NearestNeighborDataMatcher(X_labeled=X_train_minority_label1, X_unlabeled=X_train_majority_label1).match(n_neighbors=1)
@@ -122,7 +117,7 @@ class FairSHAP:
                     matching_minority_label1 = OptimalTransportPolicy(X_labeled=X_train_minority_label1.values, X_unlabeled=X_train_majority_label1.values).match()
                 else:
                     raise ValueError('The matching method is not supported')
-                print('4(a). 使用FairSHAP, 从 X_train_majority_label0中找到合适的值替换X_train_minority_label0中的数据')
+                print('4(a). Use FairSHAP to find suitable values from X_train_majority_label0 to replace data in X_train_minority_label0')
                 fairness_shapley_minority_value_label0 = fairness_explainer_original.shap_values(
                                             X = X_train_minority_label0.values,
                                             Y = y_train_minority_label0.values,
@@ -133,7 +128,7 @@ class FairSHAP:
                                         )
                 X_change_minority_label0 = X_train_minority_label0.copy()
                 X_base_minority_label0 = X_train_majority_label0
-                print('4(b). 使用FairSHAP, 从 X_train_majority_label1中找到合适的值替换X_train_minority_label1中的数据')
+                print('4(b). Use FairSHAP to find suitable values from X_train_majority_label1 to replace data in X_train_minority_label1')
                 fairness_shapley_minority_value_label1 = fairness_explainer_original.shap_values(
                                             X = X_train_minority_label1.values,
                                             Y = y_train_minority_label1.values,
@@ -144,10 +139,10 @@ class FairSHAP:
                                         )
                 X_change_minority_label1 = X_train_minority_label1.copy()
                 X_base_minority_label1 = X_train_majority_label1
-                print('5. 计算出varphi和q')
+                print('5. Calculate varphi and q')
                 fairness_shapley_minority_value = np.vstack((fairness_shapley_minority_value_label0, fairness_shapley_minority_value_label1))
                 non_zero_count_minority = np.sum(fairness_shapley_minority_value > self.threshold)
-                print(f"在X_train_minority中shapely value中大于{self.threshold}的值的个数有: {non_zero_count_minority}")
+                print(f"There are {non_zero_count_minority} SHAP values greater than {self.threshold} in X_train_minority")
                 q_minority_label0 = DataComposer(
                                 x_counterfactual=X_base_minority_label0.values, 
                                 joint_prob=matching_minority_label0, 
@@ -157,10 +152,9 @@ class FairSHAP:
                                 joint_prob=matching_minority_label1, 
                                 method="max").calculate_q()
                 q_minority = np.vstack((q_minority_label0, q_minority_label1))
-
-                print('--------接下来对majority group进行修改--------')
-                print('3(a). 将X_train_majority_label0与X_train_minority_label0进行匹配')
-                print('3(b). 将X_train_majority_label1与X_train_minority_label1进行匹配')
+                print('--------Next, modify the majority group--------')
+                print('3(a). Match X_train_majority_label0 with X_train_minority_label0')
+                print('3(b). Match X_train_majority_label1 with X_train_minority_label1')
                 if self.matching_method == 'NN':
                     matching_majority_label0 = NearestNeighborDataMatcher(X_labeled=X_train_majority_label0, X_unlabeled=X_train_minority_label0).match(n_neighbors=1)       
                     matching_majority_label1 = NearestNeighborDataMatcher(X_labeled=X_train_majority_label1, X_unlabeled=X_train_minority_label1).match(n_neighbors=1)
@@ -169,8 +163,7 @@ class FairSHAP:
                     matching_majority_label1 = OptimalTransportPolicy(X_labeled=X_train_majority_label1.values, X_unlabeled=X_train_minority_label1.values).match()
                 else:
                     raise ValueError('The matching method is not supported')
-
-                print('4(a). 使用fairshap, 从 X_train_minority_label0中找到合适的值替换X_train_majority_label0中的数据')
+                print('4(a). Use FairSHAP to find suitable values from X_train_minority_label0 to replace data in X_train_majority_label0')
                 fairness_shapley_majority_value_label0 = fairness_explainer_original.shap_values(
                                             X = X_train_majority_label0.values,
                                             Y = y_train_majority_label0.values,
@@ -181,7 +174,7 @@ class FairSHAP:
                                         )
                 X_change_majority_label0 = X_train_majority_label0.copy()
                 X_base_majority_label0 = X_train_minority_label0
-                print('4(b). 使用fairshap, 从 X_train_minority_label1中找到合适的值替换X_train_majority_label1中的数据')
+                print('4(b). Use FairSHAP to find suitable values from X_train_minority_label1 to replace data in X_train_majority_label1')
                 fairness_shapley_majority_value_label1 = fairness_explainer_original.shap_values(
                                             X = X_train_majority_label1.values,
                                             Y = y_train_majority_label1.values,
@@ -192,13 +185,11 @@ class FairSHAP:
                                         )  
                 X_change_majority_label1 = X_train_majority_label1.copy()
                 X_base_majority_label1 = X_train_minority_label1
-                    
-                print('5. 计算出varphi和q')
-                # 筛选出shapley value大于0.1的值，其他值设为0，然后归一化
+                print('5. Calculate varphi and q')
+                # Select SHAP values greater than 0.1, set others to 0, then normalize
                 fairness_shapley_majority_value = np.vstack((fairness_shapley_majority_value_label0, fairness_shapley_majority_value_label1))
-                non_zero_count_majority =np.sum(fairness_shapley_majority_value > self.threshold)
-
-                print(f"在X_train_majority中shapely value中大于{self.threshold}的值的个数有: {non_zero_count_majority}")
+                non_zero_count_majority = np.sum(fairness_shapley_majority_value > self.threshold)
+                print(f"There are {non_zero_count_majority} SHAP values greater than {self.threshold} in X_train_majority")
                 q_majority_label0 = DataComposer(
                                 x_counterfactual=X_base_majority_label0.values, 
                                 joint_prob=matching_majority_label0, 
@@ -210,7 +201,6 @@ class FairSHAP:
                 q_majority = np.vstack((q_majority_label0, q_majority_label1))
                 fairness_shapley_value = np.vstack((fairness_shapley_minority_value, fairness_shapley_majority_value))
                 # varphi = fix_negative_probabilities_select_larger(fairness_shapley_value)
-
                 if self.fairshap_base == 'DR':
                     varphi = np.where(fairness_shapley_value > self.threshold, fairness_shapley_value, 0)
                 elif self.fairshap_base == 'DP' or self.fairshap_base == 'EO' or self.fairshap_base == 'PQP':
@@ -223,43 +213,37 @@ class FairSHAP:
                 y = pd.concat([y_train_minority_label0, y_train_minority_label1, y_train_majority_label0, y_train_majority_label1], axis=0)
                 non_zero_count = non_zero_count_majority + non_zero_count_minority
 
-                # print('6. 计算original model在X_test上的accuracy, DR, DP, EO, PP')
+                # print('6. compute the accuracy, DR, DP, EO, PP of original model at X_test')
                 # y_pred = self.model.predict(self.X_test)
                 # original_accuracy = accuracy_score(self.y_test, y_pred)
                 # original_DR = fairness_value_function(sen_att, priv_val, unpriv_dict, self.X_test.values, self.model)
-
                 # priv_idx = self.X_test[self.sensitive_attri].to_numpy().astype(bool)
                 # g1_Cm, g0_Cm = marginalised_np_mat(y=self.y_test, y_hat=y_pred, pos_label=1, priv_idx=priv_idx)
                 # original_DP = grp1_DP(g1_Cm, g0_Cm)[0]
                 # original_EO = grp2_EO(g1_Cm, g0_Cm)[0]
                 # original_PQP = grp3_PQP(g1_Cm, g0_Cm)[0]
-
-                # 计算指标
+                
+                # Calculate metrics
                 # original_recall, original_precision, original_sufficiency = calculate_metrics(self.y_test, y_pred, pos=1)
-                print(f'7. 开始整理minority部分的修改和majority部分的修改并且合并新数据,共修改{non_zero_count}个数据点, 使用new training set训练新模型')
-
-                # Step 1: 将 varphi 的值和位置展开为一维
+                print(f'7. Start organizing modifications for the minority and majority groups and merge new data; total of {non_zero_count} data points modified; train a new model using the new training set')
+                # Step 1: Flatten varphi values and positions into one dimension
                 flat_varphi = [(value, row, col) for row, row_vals in enumerate(varphi)
                             for col, value in enumerate(row_vals)]
-                # Step 2: 按值降序排序
+                # Step 2: Sort by value in descending order
                 flat_varphi_sorted = sorted(flat_varphi, key=lambda x: x[0], reverse=True)
-                # Step 3: 挑出前 action_number 个数的位置
+                # Step 3: Select top action_number positions
                 top_positions = flat_varphi_sorted[:non_zero_count-1]
                 print(f"top_positions: {non_zero_count}")
-                # Step 4: 替换 X 中前三列的值为 S 中对应位置的值
+                # Step 4: Replace values in X_change at top positions
                 for value, row_idx, col_idx in top_positions:
                     X_change.iloc[row_idx, col_idx] = q[row_idx, col_idx]
-  
                 wasserstein_scores = compute_wasserstein_fidelity(X_change.values, x.values)
-
-                # 比较这两个变量有多少不同
+                # Count how many differences exist between these two variables
                 diff_count = np.sum(X_change.values != x.values)
                 print(f"diff_count: {diff_count}")
-
                 # Step 6: Train the new model            
                 model_new = XGBClassifier()
                 model_new.fit(X_change, y)
-
                 # accuracy, dr, dp, eo, pqp = self._run_evaluation_np(model, X_val_repair, y_val)
                 accuracy, dr, dp, eo, pqp = self._run_evaluation_pd(model_new, X_val, y_val)
                 mmd_score = compute_mmd_distance(X_change.values, x.values, gamma=1.0 / X_train.shape[1])
@@ -271,10 +255,9 @@ class FairSHAP:
                 modification_num.append(diff_count)
                 wasserstein_distance.append(wasserstein_scores)
                 mmd_distance.append(mmd_score)
-
             save_dir = "saved_results/sota_results"
-            os.makedirs(save_dir, exist_ok=True)  # 自动创建目录（如果不存在）
-            # Save PROCESSED results of current dataset in a csv file
+            os.makedirs(save_dir, exist_ok=True)  # Automatically create directory (if not exists)
+            # Save PROCESSED results of current dataset in a CSV file
             processed_stats = {
                 'processed_accuracy': f"{np.mean(processed_accuracy):.4f} ± {np.std(processed_accuracy):.4f}",
                 'processed_dr': f"{np.mean(processed_dr):.4f} ± {np.std(processed_dr):.4f}",
@@ -286,7 +269,6 @@ class FairSHAP:
                 'mmd_distance': f"{np.mean(mmd_distance):.4f} ± {np.std(mmd_distance):.4f}",
             }
             processed_results = pd.DataFrame(processed_stats, index=[self.dataset_name]).T
-
             processed_csv_file = os.path.join(save_dir, f"FairSHAP_{self.matching_method}_{self.threshold}_results.csv")
             if os.path.exists(processed_csv_file):
                 existing_df = pd.read_csv(processed_csv_file, index_col=0)
@@ -294,15 +276,9 @@ class FairSHAP:
                 existing_df.to_csv(processed_csv_file)
             else:
                 processed_results.to_csv(processed_csv_file)
-            print(f"✅ {self.dataset_name} 处理后结果已保存到 {processed_csv_file}")
+            print(f"✅ Processed results for {self.dataset_name} have been saved to {processed_csv_file}")
 
-
-
-
-
-
-
-    def _run_evaluation_pd(self, model, X_val:pd.DataFrame, y_val:pd.Series):
+    def _run_evaluation_pd(self, model, X_val: pd.DataFrame, y_val: pd.Series):
         sen_att_name = [self.sen_att_name]
         sen_att = [X_val.columns.get_loc(name) for name in sen_att_name]
         priv_val = [self.priv]
@@ -310,13 +286,13 @@ class FairSHAP:
         for sa_list, pv in zip(unpriv_dict, priv_val):
             sa_list.remove(pv)
         fairness_explainer_original = FairnessExplainer(
-                model=model, 
-                sen_att=sen_att, 
-                priv_val=priv_val, 
+                model=model,
+                sen_att=sen_att,
+                priv_val=priv_val,
                 unpriv_dict=unpriv_dict,
                 fairshap_base='DR'
                 )
-        # calculate fairness value on val data(test data)
+        # Calculate fairness value on validation data (test data)
         y_pred = model.predict(X_val)
         original_accuracy = accuracy_score(y_val, y_pred)
         original_DR = fairness_value_function(sen_att, priv_val, unpriv_dict, X_val.values, model)
@@ -327,7 +303,8 @@ class FairSHAP:
         original_EO = grp2_EO(g1_Cm, g0_Cm)[0]
         original_PQP = grp3_PQP(g1_Cm, g0_Cm)[0]
         return original_accuracy, original_DR, original_DP, original_EO, original_PQP
-    
+
+
     def _run_evaluation_np(self, model, X_val: np.ndarray, y_val: np.ndarray):
         """
         Fairness evaluation function adapted for NumPy arrays.
@@ -357,9 +334,9 @@ class FairSHAP:
 
         # Initialize the fairness explainer
         fairness_explainer_original = FairnessExplainer(
-            model=model, 
-            sen_att=sen_att, 
-            priv_val=priv_val, 
+            model=model,
+            sen_att=sen_att,
+            priv_val=priv_val,
             unpriv_dict=unpriv_dict,
             fairshap_base='DR'
         )
@@ -382,7 +359,8 @@ class FairSHAP:
 
         return original_accuracy, original_DR, original_DP, original_EO, original_PQP
 
-    def _split_into_majority_minority_label0_label1(self, X_train:pd.DataFrame, y_train:pd.Series):
+
+    def _split_into_majority_minority_label0_label1(self, X_train: pd.DataFrame, y_train: pd.Series):
         '''
         This function is used to divide the dataset into majority group and minority group
 
@@ -398,7 +376,7 @@ class FairSHAP:
         - y_minority: pd.Series, the minority group labels
         '''
         group_division = X_train[self.sen_att_name].value_counts()
-        '''把X_train分成majority和minority两个部分'''
+        '''Split X_train into majority and minority groups'''
         if group_division[0] > group_division[1]:  #
             majority = X_train[self.sen_att_name] == 0
             X_train_majority = X_train[majority]
@@ -425,7 +403,7 @@ class FairSHAP:
         X_train_minority_label0 = X_train_minority.loc[y_train_minority_label0.index]
         X_train_minority_label1 = X_train_minority.loc[y_train_minority_label1.index]
 
-        return X_train_majority_label0, y_train_majority_label0, X_train_majority_label1, y_train_majority_label1, X_train_minority_label0, y_train_minority_label0, X_train_minority_label1, y_train_minority_label1 
+        return X_train_majority_label0, y_train_majority_label0, X_train_majority_label1, y_train_majority_label1, X_train_minority_label0, y_train_minority_label0, X_train_minority_label1, y_train_minority_label1
 
 
 
@@ -445,7 +423,7 @@ def fairness_value_function(sen_att, priv_val, unpriv_dict, X, model):
 
 
 def compute_wasserstein_fidelity(original_data: np.ndarray, augmented_data: np.ndarray):
-    assert original_data.shape == augmented_data.shape, "数据形状必须匹配"
+    assert original_data.shape == augmented_data.shape, "must have the same shape"
     
     num_features = original_data.shape[1]
     wasserstein_scores = [
@@ -545,19 +523,12 @@ def grp3_PQP(g1_Cm, g0_Cm):
   g0 = zero_division(g0_Cm[0], g0)
   return abs(g0 - g1), float(g1), float(g0)
 
-# 定义计算指标的函数
-def calculate_metrics(y_test, y_pred, pos=1):
 
+def calculate_metrics(y_test, y_pred, pos=1):
     tp, fp, fn, tn = contingency_tab_bi(y_test, y_pred, pos)
-    # 召回率
     recall = tp / (tp + fn) if (tp + fn) != 0 else 0
-    
-    # 精确率
     precision = tp / (tp + fp) if (tp + fp) != 0 else 0
-    
-    # 充分性（根据新定义）
     sufficiency = tn / (tn + fp) if (tn + fp) != 0 else 0
-    
     return recall, precision, sufficiency
 
 def compute_mmd_distance(X1, X2, gamma=1.0):
