@@ -163,3 +163,7 @@ visualizations/
 *.sh
 /*.py
 comparison.xlsx
+
+# file of future work
+experiments/experiment_eo.py
+experiments/experiment_new_eo.py
