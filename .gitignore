@@ -159,3 +159,7 @@ cython_debug/
 dataset/
 saved_results/
 visualizations/
+.vscode/
+
+*.sh
+/*.py

@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter  # For curve smoothing
 
-
 def plot_multi_dataset_fairness_improvement(
     datasets_info,
     stop_when_no_data=4,
@@ -11,117 +10,113 @@ def plot_multi_dataset_fairness_improvement(
     baseline=0.0,
     figsize=None,  
     fill_alpha=0.2,
-    color_palette=['b', 'g', 'r', 'c', 'm', 'y'],
+    color_palette=['b', 'g', '#FF9C9C', 'c', 'm', 'y'],
     smooth_window=20,
     smooth_polyorder=2
 ):
     """
-    生成符合 ICLR/ICML 风格的公平性改进折线图，去除上边界和右边界，并保存为 PNG。
+    生成符合 ICLR/ICML 风格的 DR 指标改进折线图（单行布局），每个 modification_num/5 位置加空心方块点，并保存为 PNG。
     """
+    # 只保留 DR 指标
     measures_info = [
-        ("Accuracy", "new_accuracy"),
         ("DR", "new_DR"),
-        ("DP", "new_DP"),
-        ("EO", "new_EO"),
-        ("PQP", "new_PQP"),
     ]
-    
+
     num_datasets = len(datasets_info)
     num_metrics = len(measures_info)
-    
-    # 自动确定图像大小
+
     if figsize is None:
-        figsize = (num_metrics * 3.5, num_datasets * 2.5)
-    
-    fig = plt.figure(figsize=figsize)
-    
+        figsize = (num_datasets * 3.5, 3.0)  # 一行显示
+
+    fig, axes = plt.subplots(1, num_datasets, figsize=figsize, squeeze=False)
+
     for dataset_idx, dataset_info in enumerate(datasets_info):
         dataset_name = dataset_info['name']
+        if dataset_name == "COMPAS":
+            dataset_name = "COMPAS (Sex)"
+        elif "COMPAS" not in dataset_name:
+            dataset_name += " (Sex)"
+
         folds = dataset_info['folds']
-        
-        for metric_idx, (measure_name, measure_col) in enumerate(measures_info):
+        ax = axes[0, dataset_idx]
+
+        for measure_name, measure_col in measures_info:
             original_values = dataset_info[f'original_{measure_name}']
-            
-            subplot_idx = dataset_idx * num_metrics + metric_idx + 1
-            ax = fig.add_subplot(num_datasets, num_metrics, subplot_idx)
-            
+
             for df, orig_val in zip(folds, original_values):
                 df['modification_num'] = pd.to_numeric(df['action_number'], errors='coerce')
-                df[measure_col] = df[measure_col] - orig_val
-            
+                df[measure_col] = (orig_val - df[measure_col]) / abs(orig_val) * 100
+
             max_actions = [df['modification_num'].max() for df in folds if not df.empty]
             if len(max_actions) == 0:
                 continue
             overall_max_action = int(np.nanmax(max_actions))
-            
+
             measure_values = {}
             for action in range(min_action, overall_max_action + 1):
                 current_list = []
                 count_no_data = 0
-                
+
                 for df in folds:
                     row = df.loc[df['modification_num'] == action, measure_col]
                     if row.empty:
                         count_no_data += 1
                     else:
                         current_list.append(row.values[0])
-                
+
                 if count_no_data >= stop_when_no_data:
                     break
-                
+
                 measure_values[action] = current_list
-            
+
             action_range = sorted(measure_values.keys())
             if len(action_range) == 0:
                 continue
-            
+
             means = np.array([np.mean(measure_values[action]) for action in action_range])
             stds = np.array([np.std(measure_values[action]) for action in action_range])
-            
-            # 平滑曲线
+
             if len(means) > smooth_window:
                 smoothed_means = savgol_filter(means, window_length=smooth_window, polyorder=smooth_polyorder)
             else:
                 smoothed_means = means
-            
+
             color = color_palette[dataset_idx % len(color_palette)]
-            
-            ax.axhline(y=baseline, color='black', linewidth=1.5, linestyle='--')
-            ax.plot(action_range, smoothed_means, color=color, linewidth=3)
+
+            ax.axhline(y=baseline, color='black', linewidth=1, linestyle='--')
+            ax.plot(action_range, smoothed_means, color=color, linewidth=2)
             ax.fill_between(action_range, smoothed_means - stds, smoothed_means + stds, alpha=fill_alpha, color=color)
-            
-            # 设置标题和标签
+
+            # 在每隔 modification_num/5 的位置加空心方块点
+            step = max(1, len(action_range) // 5)
+            for i in range(0, len(action_range), step):
+                ax.plot(action_range[i], smoothed_means[i], marker='s', markerfacecolor='white', markeredgecolor=color, markersize=5)
+
+            # 仅第一个子图加 y 标签
             if dataset_idx == 0:
-                ax.set_title(f"{measure_name}", fontsize=12)
-            
-            if metric_idx == 0:
-                ax.set_ylabel(f"{dataset_name}", fontsize=10)
-            
-            if dataset_idx == num_datasets - 1:
-                ax.set_xlabel("Modification Number", fontsize=10)
-            
-            # # 移除上边界和右边界，符合 ICLR/ICML 风格
-            # ax.spines["top"].set_visible(False)
-            # ax.spines["right"].set_visible(False)
-            
-            # 添加网格
+                ax.set_ylabel("DR Reduction (%)", fontsize=10)
+            else:
+                pass  # 保留 y 轴刻度值，不隐藏
+
+            ax.set_xlabel("Mod. Num", fontsize=10)
+            ax.set_title(dataset_name, fontsize=10)
+
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
             ax.grid(True, linestyle='--', alpha=0.7)
-            
+
             y_min = min(smoothed_means - stds) * 1.2 if min(smoothed_means - stds) < 0 else min(smoothed_means - stds) * 0.8
             y_max = max(smoothed_means + stds) * 1.2 if max(smoothed_means + stds) > 0 else max(smoothed_means + stds) * 0.8
             ax.set_ylim([y_min, y_max])
-    
+
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.subplots_adjust(hspace=0.3, wspace=0.2)
-    
-    # 保存 PNG 文件
-    output_filename = "fairness_improvement_plot.png"
+
+    output_filename = "dr_improvement_plot.png"
     fig.savefig(output_filename, dpi=300, bbox_inches="tight")
     plt.close(fig)
-    
+
     return output_filename
-
-
 
 def extract_original_values(fold):
     """Extract original metric values from the first row of a fold's dataframe."""
@@ -170,7 +165,7 @@ def load_dataset_folds(dataset_path, fold_pattern, num_folds=5):
         'original_PQP': original_PQP
     }
 
-# Example usage
+
 if __name__ == "__main__":
     # List of datasets to process
     datasets = [
@@ -220,9 +215,9 @@ if __name__ == "__main__":
         stop_when_no_data=4,
         min_action=1,
         baseline=0.0,
-        figsize=(20, 15),  # Width, height
+        figsize=(18, 3),  # Width, height
         fill_alpha=0.2,
-        color_palette=['b', 'g', 'r', 'c', 'm', 'y'],
+        color_palette=['b', 'g',  '#FF9C9C', 'c', 'm', 'y'],
         smooth_window=50, 
         smooth_polyorder=1
     )
