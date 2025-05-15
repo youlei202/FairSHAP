@@ -160,6 +160,6 @@ dataset/
 saved_results/
 visualizations/
 .vscode/
-
 *.sh
 /*.py
+comparison.xlsx
