@@ -165,5 +165,5 @@ visualizations/
 comparison.xlsx
 
 # file of future work
-experiments/experiment_eo.py
-experiments/experiment_new_eo.py
+src/experiments/experiment_eo.py
+src/experiments/experiment_new_eo.py
