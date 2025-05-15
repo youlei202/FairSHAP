@@ -155,3 +155,15 @@ dmypy.json
 cython_debug/
 
 .history
+
+dataset/
+saved_results/
+visualizations/
+.vscode/
+*.sh
+/*.py
+comparison.xlsx
+
+# file of future work
+src/experiments/experiment_eo.py
+src/experiments/experiment_new_eo.py
