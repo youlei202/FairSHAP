@@ -14,7 +14,7 @@ def plot_multi_dataset_fairness_improvement(
     baseline=0.0,
     figsize=None,  
     fill_alpha=0.2,
-    color_palette=['b', 'g', '#FF9C9C', 'c', 'm', 'y'],
+    color_palette=['b', 'g', 'r', 'c', 'm', 'y'],
     smooth_window=20,
     smooth_polyorder=2
 ):
@@ -25,9 +25,9 @@ def plot_multi_dataset_fairness_improvement(
     num_metrics = len(measures_info)
 
     if figsize is None:
-        figsize = (num_datasets * 3.5, 3.0)  
+        figsize = (12, 6)  # 增加高度以适应两行
 
-    fig, axes = plt.subplots(1, num_datasets, figsize=figsize, squeeze=False)
+    fig, axes = plt.subplots(2, 3, figsize=figsize, squeeze=False)
 
     for dataset_idx, dataset_info in enumerate(datasets_info):
         dataset_name = dataset_info['name']
@@ -37,7 +37,9 @@ def plot_multi_dataset_fairness_improvement(
             dataset_name += " (Sex)"
 
         folds = dataset_info['folds']
-        ax = axes[0, dataset_idx]
+        row_idx = dataset_idx // 3
+        col_idx = dataset_idx % 3
+        ax = axes[row_idx, col_idx]
 
         for measure_name, measure_col in measures_info:
             original_values = dataset_info[f'original_{measure_name}']
@@ -86,16 +88,13 @@ def plot_multi_dataset_fairness_improvement(
             ax.plot(action_range, smoothed_means, color=color, linewidth=2)
             ax.fill_between(action_range, smoothed_means - stds, smoothed_means + stds, alpha=fill_alpha, color=color)
 
-            # Add hollow square markers every modification_num/5 steps
             step = max(1, len(action_range) // 5)
             for i in range(0, len(action_range), step):
                 ax.plot(action_range[i], smoothed_means[i], marker='s', markerfacecolor='white', markeredgecolor=color, markersize=5)
 
-            # Only add y-label to the first subplot
-            if dataset_idx == 0:
+            # Set y-label only for left column
+            if col_idx == 0:
                 ax.set_ylabel("DR Reduction (%)", fontsize=10)
-            else:
-                pass  # Keep y-axis tick values, do not hide
 
             ax.set_xlabel("Mod. Num", fontsize=10)
             ax.set_title(dataset_name, fontsize=10)
@@ -109,14 +108,12 @@ def plot_multi_dataset_fairness_improvement(
             ax.set_ylim([y_min, y_max])
 
     plt.tight_layout(rect=[0, 0, 1, 0.96])
-    plt.subplots_adjust(hspace=0.3, wspace=0.2)
+    plt.subplots_adjust(hspace=0.35, wspace=0.2)
 
-    output_filename = "dr_improvement_plot.png"
+    output_filename = "dr_improvement_plot.pdf"
     fig.savefig(output_filename, dpi=300, bbox_inches="tight")
     plt.close(fig)
-
     return output_filename
-
 
 def extract_original_values(fold):
     """Extract original metric values from the first row of a fold's dataframe."""
@@ -215,9 +212,9 @@ if __name__ == "__main__":
         stop_when_no_data=4,
         min_action=1,
         baseline=0.0,
-        figsize=(18, 3),  # Width, height
+        figsize=(14, 6),  # Width, height
         fill_alpha=0.2,
-        color_palette=['b', 'g', '#FF9C9C', 'c', 'm', 'y'],
+        color_palette=['b', 'g', 'r', 'c', 'm', 'y'],
         smooth_window=50, 
         smooth_polyorder=1
     )
